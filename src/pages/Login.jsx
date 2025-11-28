@@ -33,16 +33,18 @@ const Login = () => {
     setError('');
     setLoading(true);
 
-    // Simple authentication (you can replace this with actual API call)
-    // For now, accept any username/password or specific credentials
+    // Simple authentication: only allow admin / @admin123
     setTimeout(() => {
-      if (formData.username && formData.password) {
+      const isValidUser =
+        formData.username === 'admin' && formData.password === '@admin123';
+
+      if (isValidUser) {
         // Store simple auth state (in production, use proper auth tokens)
         localStorage.setItem('isAuthenticated', 'true');
         localStorage.setItem('username', formData.username);
         navigate('/app/products');
       } else {
-        setError('Please enter both username and password');
+        setError('Invalid username or password');
       }
       setLoading(false);
     }, 500);
