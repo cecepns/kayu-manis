@@ -1,0 +1,149 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-gray-50 text-gray-900 font-sans;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200 flex items-center gap-2;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors duration-200 flex items-center gap-2;
+  }
+  
+  .btn-danger {
+    @apply bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200 flex items-center gap-2;
+  }
+  
+  .input-field {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200;
+  }
+  
+  .table-header {
+    @apply bg-yellow-100 text-gray-700 font-semibold text-sm tracking-wide;
+  }
+  
+  .table-cell {
+    @apply px-4 py-3 text-sm text-gray-900 border-b border-gray-200;
+  }
+  
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-200 p-6;
+  }
+  
+  .page-title {
+    @apply text-3xl font-bold text-gray-900 mb-2;
+  }
+  
+  .page-subtitle {
+    @apply text-gray-600 mb-6;
+  }
+}
+
+/* AOS Custom Styles */
+[data-aos] {
+  opacity: 0;
+  transition-property: opacity, transform;
+}
+
+[data-aos].aos-animate {
+  opacity: 1;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* React Select Styles */
+.react-select-container {
+  @apply w-full;
+}
+
+.react-select__control {
+  @apply border border-gray-300 rounded-lg min-h-[42px] bg-white;
+}
+
+.react-select__control:hover {
+  @apply border-gray-400;
+}
+
+.react-select__control--is-focused {
+  @apply border-primary-500 ring-2 ring-primary-500 ring-opacity-20;
+  box-shadow: 0 0 0 1px #3b82f6;
+}
+
+.react-select__placeholder {
+  @apply text-gray-400;
+}
+
+.react-select__input-container {
+  @apply text-gray-900;
+}
+
+.react-select__single-value {
+  @apply text-gray-900;
+}
+
+.react-select__menu {
+  @apply border border-gray-200 rounded-lg shadow-lg mt-1;
+}
+
+.react-select__menu-list {
+  @apply py-1;
+}
+
+.react-select__option {
+  @apply px-3 py-2 cursor-pointer;
+}
+
+.react-select__option--is-focused {
+  @apply bg-gray-100;
+}
+
+.react-select__option--is-selected {
+  @apply bg-primary-600 text-white;
+}
+
+.react-select__option--is-selected.react-select__option--is-focused {
+  @apply bg-primary-700 text-white;
+}
+
+.react-select__indicator-separator {
+  @apply bg-gray-300;
+}
+
+.react-select__clear-indicator {
+  @apply cursor-pointer text-gray-400 hover:text-gray-600;
+}
+
+.react-select__dropdown-indicator {
+  @apply text-gray-400 hover:text-gray-600;
+}
