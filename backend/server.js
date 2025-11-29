@@ -126,7 +126,7 @@ app.get('/api/products', async (req, res) => {
 app.get('/api/products/select', async (req, res) => {
   try {
     const [products] = await db.execute(
-      'SELECT id, km_code, description, cbm, fob_price, gross_weight, net_weight, total_gw, total_nw, picture_url, size_width, size_depth, size_height, color FROM products ORDER BY km_code'
+      'SELECT id, km_code, description, cbm, fob_price, gross_weight, net_weight, total_gw, total_nw, picture_url, size_width, size_depth, size_height, packing_width, packing_depth, packing_height, color FROM products ORDER BY km_code'
     );
 
     res.json({ products });
@@ -167,6 +167,26 @@ app.post('/api/products', upload.single('picture'), async (req, res) => {
       picture_url = '/uploads-furniture/' + req.file.filename;
     }
 
+    // Auto-calculate CBM from packing dimensions: W x D x H / 1,000,000
+    let calculatedCBM = null;
+    if (packing_width && packing_depth && packing_height) {
+      const width = parseFloat(packing_width) || 0;
+      const depth = parseFloat(packing_depth) || 0;
+      const height = parseFloat(packing_height) || 0;
+      if (width > 0 && depth > 0 && height > 0) {
+        calculatedCBM = ((width * depth * height) / 1000000).toFixed(4);
+      }
+    }
+
+    // Auto-calculate total_gw from gross_weight
+    const calculatedTotalGW = gross_weight || null;
+
+    // Auto-calculate total_nw from net_weight
+    const calculatedTotalNW = net_weight || null;
+
+    // Auto-calculate total_price from fob_price
+    const calculatedTotalPrice = fob_price || null;
+
     const [result] = await db.execute(`
       INSERT INTO products (
         km_code, description, picture_url, size_width, size_depth, size_height,
@@ -175,8 +195,9 @@ app.post('/api/products', upload.single('picture'), async (req, res) => {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       km_code, description, picture_url, size_width, size_depth, size_height,
-      packing_width, packing_depth, packing_height, cbm, color,
-      gross_weight, net_weight, total_gw, total_nw || null, fob_price, total_price, hs_code
+      packing_width, packing_depth, packing_height, calculatedCBM || cbm, color,
+      gross_weight, net_weight, calculatedTotalGW || total_gw, calculatedTotalNW || total_nw || null, 
+      fob_price, calculatedTotalPrice || total_price, hs_code
     ]);
 
     res.status(201).json({ 
@@ -220,6 +241,26 @@ app.put('/api/products/:id', upload.single('picture'), async (req, res) => {
       picture_url = '/uploads-furniture/' + req.file.filename;
     }
 
+    // Auto-calculate CBM from packing dimensions: W x D x H / 1,000,000
+    let calculatedCBM = null;
+    if (packing_width && packing_depth && packing_height) {
+      const width = parseFloat(packing_width) || 0;
+      const depth = parseFloat(packing_depth) || 0;
+      const height = parseFloat(packing_height) || 0;
+      if (width > 0 && depth > 0 && height > 0) {
+        calculatedCBM = ((width * depth * height) / 1000000).toFixed(4);
+      }
+    }
+
+    // Auto-calculate total_gw from gross_weight
+    const calculatedTotalGW = gross_weight || null;
+
+    // Auto-calculate total_nw from net_weight
+    const calculatedTotalNW = net_weight || null;
+
+    // Auto-calculate total_price from fob_price
+    const calculatedTotalPrice = fob_price || null;
+
     await db.execute(`
       UPDATE products SET 
         km_code = ?, description = ?, picture_url = ?, 
@@ -231,8 +272,9 @@ app.put('/api/products/:id', upload.single('picture'), async (req, res) => {
       WHERE id = ?
     `, [
       km_code, description, picture_url, size_width, size_depth, size_height,
-      packing_width, packing_depth, packing_height, cbm, color,
-      gross_weight, net_weight, total_gw, total_nw || null, fob_price, total_price, hs_code,
+      packing_width, packing_depth, packing_height, calculatedCBM || cbm, color,
+      gross_weight, net_weight, calculatedTotalGW || total_gw, calculatedTotalNW || total_nw || null, 
+      fob_price, calculatedTotalPrice || total_price, hs_code,
       req.params.id
     ]);
 

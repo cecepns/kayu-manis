@@ -38,6 +38,18 @@ const ProductForm = () => {
     try {
       setLoading(true);
       const product = await productsAPI.getProduct(id);
+      
+      // Calculate CBM from packing dimensions
+      let calculatedCBM = '';
+      if (product.packing_width && product.packing_depth && product.packing_height) {
+        const width = parseFloat(product.packing_width) || 0;
+        const depth = parseFloat(product.packing_depth) || 0;
+        const height = parseFloat(product.packing_height) || 0;
+        if (width > 0 && depth > 0 && height > 0) {
+          calculatedCBM = ((width * depth * height) / 1000000).toFixed(4);
+        }
+      }
+
       setFormData({
         km_code: product.km_code || '',
         description: product.description || '',
@@ -48,14 +60,14 @@ const ProductForm = () => {
         packing_width: product.packing_width || '',
         packing_depth: product.packing_depth || '',
         packing_height: product.packing_height || '',
-        cbm: product.cbm || '',
+        cbm: calculatedCBM || product.cbm || '',
         color: product.color || '',
         gross_weight: product.gross_weight || '',
         net_weight: product.net_weight || '',
-        total_gw: product.total_gw || '',
-        total_nw: product.total_nw || '',
+        total_gw: product.gross_weight || product.total_gw || '',
+        total_nw: product.net_weight || product.total_nw || '',
         fob_price: product.fob_price || '',
-        total_price: product.total_price || '',
+        total_price: product.fob_price || product.total_price || '',
         hs_code: product.hs_code || ''
       });
       
@@ -78,10 +90,40 @@ const ProductForm = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
+    const updatedFormData = {
+      ...formData,
       [name]: value
-    }));
+    };
+
+    // Auto-calculate CBM from packing dimensions: W x D x H / 1,000,000
+    if (name === 'packing_width' || name === 'packing_depth' || name === 'packing_height') {
+      const width = parseFloat(name === 'packing_width' ? value : updatedFormData.packing_width) || 0;
+      const depth = parseFloat(name === 'packing_depth' ? value : updatedFormData.packing_depth) || 0;
+      const height = parseFloat(name === 'packing_height' ? value : updatedFormData.packing_height) || 0;
+      
+      if (width > 0 && depth > 0 && height > 0) {
+        updatedFormData.cbm = ((width * depth * height) / 1000000).toFixed(4);
+      } else {
+        updatedFormData.cbm = '';
+      }
+    }
+
+    // Auto-calculate total_gw from gross_weight
+    if (name === 'gross_weight') {
+      updatedFormData.total_gw = value || '';
+    }
+
+    // Auto-calculate total_nw from net_weight
+    if (name === 'net_weight') {
+      updatedFormData.total_nw = value || '';
+    }
+
+    // Auto-calculate total_price from fob_price
+    if (name === 'fob_price') {
+      updatedFormData.total_price = value || '';
+    }
+
+    setFormData(updatedFormData);
   };
 
   const handleImageChange = (e) => {
@@ -167,7 +209,7 @@ const ProductForm = () => {
     {
       title: 'Physical Properties',
       fields: [
-        { label: 'CBM', name: 'cbm', type: 'number', step: '0.01' },
+        { label: 'CBM (Auto-calculated from packing size)', name: 'cbm', type: 'number', step: '0.01', readOnly: true },
         { label: 'Color', name: 'color', type: 'text' }
       ]
     },
@@ -176,15 +218,15 @@ const ProductForm = () => {
       fields: [
         { label: 'Gross Weight (Kgs)', name: 'gross_weight', type: 'number', step: '0.01' },
         { label: 'Net Weight (Kgs)', name: 'net_weight', type: 'number', step: '0.01' },
-        { label: 'Total GW (Kgs)', name: 'total_gw', type: 'number', step: '0.01' },
-        { label: 'Total NW (Kgs)', name: 'total_nw', type: 'number', step: '0.01' }
+        { label: 'Total GW (Kgs) (Auto-calculated)', name: 'total_gw', type: 'number', step: '0.01', readOnly: true },
+        { label: 'Total NW (Kgs) (Auto-calculated)', name: 'total_nw', type: 'number', step: '0.01', readOnly: true }
       ]
     },
     {
       title: 'Pricing',
       fields: [
         { label: 'FOB Price', name: 'fob_price', type: 'number', step: '0.01' },
-        { label: 'Total Price', name: 'total_price', type: 'number', step: '0.01' }
+        { label: 'Total Price (Auto-calculated)', name: 'total_price', type: 'number', step: '0.01', readOnly: true }
       ]
     },
     {
@@ -306,7 +348,8 @@ const ProductForm = () => {
                         onChange={handleInputChange}
                         required={field.required}
                         step={field.step}
-                        className="input-field"
+                        readOnly={field.readOnly}
+                        className={`input-field ${field.readOnly ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                         placeholder={`Enter ${field.label.toLowerCase()}`}
                       />
                     )}

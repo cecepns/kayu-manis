@@ -127,15 +127,26 @@ const OrderForm = () => {
       const qty = parseInt(updatedItems[index].qty) || 0;
       
       if (product && qty > 0 && productId) {
+        // Calculate CBM from packing dimensions: W x D x H x QTY / 1,000,000
+        let cbmTotal = 0;
+        if (product.packing_width && product.packing_depth && product.packing_height) {
+          const width = parseFloat(product.packing_width) || 0;
+          const depth = parseFloat(product.packing_depth) || 0;
+          const height = parseFloat(product.packing_height) || 0;
+          if (width > 0 && depth > 0 && height > 0) {
+            cbmTotal = ((width * depth * height * qty) / 1000000).toFixed(4);
+          }
+        }
+
         updatedItems[index] = {
           ...updatedItems[index],
           product_id: productId,
-          cbm_total: (parseFloat(product.cbm) * qty).toFixed(2),
+          cbm_total: cbmTotal,
           fob_total_usd: (parseFloat(product.fob_price) * qty).toFixed(2),
-          gross_weight_total: (parseFloat(product.gross_weight) * qty).toFixed(2),
-          net_weight_total: (parseFloat(product.net_weight) * qty).toFixed(2),
-          total_gw_total: (parseFloat(product.total_gw) * qty).toFixed(2),
-          total_nw_total: (parseFloat(product.total_nw || 0) * qty).toFixed(2),
+          gross_weight_total: (parseFloat(product.gross_weight || 0) * qty).toFixed(2),
+          net_weight_total: (parseFloat(product.net_weight || 0) * qty).toFixed(2),
+          total_gw_total: (parseFloat(product.gross_weight || 0) * qty).toFixed(2), // Use gross_weight instead of total_gw
+          total_nw_total: (parseFloat(product.net_weight || 0) * qty).toFixed(2), // Use net_weight instead of total_nw
           fob: product.fob_price || ''
         };
       } else if (field === 'product_id' && !productId) {
