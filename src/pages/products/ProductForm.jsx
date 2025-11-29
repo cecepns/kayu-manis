@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Upload, X } from 'lucide-react';
+import Select from 'react-select';
 import { productsAPI } from '../../utils/apiProducts';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 
@@ -14,6 +15,7 @@ const ProductForm = () => {
   const [imagePreview, setImagePreview] = useState(null);
 
   const [formData, setFormData] = useState({
+    client_code: '',
     km_code: '',
     description: '',
     picture: null,
@@ -51,6 +53,7 @@ const ProductForm = () => {
       }
 
       setFormData({
+        client_code: product.client_code || '',
         km_code: product.km_code || '',
         description: product.description || '',
         picture: null,
@@ -176,10 +179,19 @@ const ProductForm = () => {
     return <LoadingSpinner text={`Loading product...`} />;
   }
 
+  const HS_CODE_OPTIONS = [
+    { value: '9403.60.90', label: '9403.60.90' },
+    { value: '9403.91.00', label: '9403.91.00' },
+    { value: '9401.69.90', label: '9401.69.90' },
+    { value: '7009.92.00', label: '7009.92.00' },
+    { value: '6910.90.00', label: '6910.90.00' }
+  ];
+
   const formSections = [
     {
       title: 'Basic Information',
       fields: [
+        { label: 'Client Code', name: 'client_code', type: 'text', required: false },
         { label: 'KM Code', name: 'km_code', type: 'text', required: true },
         { label: 'Description', name: 'description', type: 'textarea', required: true },
       ]
@@ -232,13 +244,13 @@ const ProductForm = () => {
     {
       title: 'Additional Information',
       fields: [
-        { label: 'HS Code', name: 'hs_code', type: 'text' }
+        { label: 'HS Code', name: 'hs_code', type: 'select', isReactSelect: true, options: HS_CODE_OPTIONS }
       ]
     }
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 mb-24">
       {/* Header */}
       <div className="flex items-center space-x-4">
         <button 
@@ -325,20 +337,49 @@ const ProductForm = () => {
                         placeholder={`Enter ${field.label.toLowerCase()}`}
                       />
                     ) : field.type === 'select' ? (
-                      <select
-                        id={field.name}
-                        name={field.name}
-                        value={formData[field.name]}
-                        onChange={handleInputChange}
-                        required={field.required}
-                        className="input-field"
-                      >
-                        {field.options.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
+                      field.isReactSelect ? (
+                        <Select
+                          id={field.name}
+                          name={field.name}
+                          value={
+                            field.options.find(
+                              (option) => option.value === formData[field.name]
+                            ) || null
+                          }
+                          onChange={(selectedOption) =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              [field.name]: selectedOption ? selectedOption.value : ''
+                            }))
+                          }
+                          options={field.options}
+                          isClearable
+                          className="react-select-container"
+                          classNamePrefix="react-select"
+                          placeholder={`Select ${field.label.toLowerCase()}`}
+                        />
+                      ) : (
+                        <select
+                          id={field.name}
+                          name={field.name}
+                          value={formData[field.name]}
+                          onChange={handleInputChange}
+                          required={field.required}
+                          className="input-field"
+                        >
+                          {field.options.map((option) =>
+                            typeof option === 'string' ? (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ) : (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            )
+                          )}
+                        </select>
+                      )
                     ) : (
                       <input
                         type={field.type}

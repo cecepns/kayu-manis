@@ -31,7 +31,6 @@ const OrderForm = () => {
     items: [
       {
         product_id: '',
-        client_code: '',
         qty: 1,
         cbm_total: 0,
         fob_total_usd: 0,
@@ -189,7 +188,6 @@ const OrderForm = () => {
         ...prev.items,
         {
           product_id: '',
-          client_code: '',
           qty: 1,
           cbm_total: 0,
           fob_total_usd: 0,
@@ -475,16 +473,18 @@ const OrderForm = () => {
               <label htmlFor="volume" className="block text-sm font-medium text-gray-700 mb-1">
                 Volume (CBM)
               </label>
-              <input
-                type="number"
-                step="0.01"
+              <select
                 id="volume"
                 name="volume"
                 value={orderData.volume}
                 onChange={handleOrderInfoChange}
                 className="input-field"
-                placeholder="Enter shipment volume"
-              />
+              >
+                <option value="">Pilih volume kontainer</option>
+                <option value="1 x 20&quot;">1 x 20&quot;</option>
+                <option value="1 x 40&quot;">1 x 40&quot;</option>
+                <option value="1 x 40&quot; H">1 x 40&quot; H</option>
+              </select>
             </div>
             <div>
               <label htmlFor="port_loading" className="block text-sm font-medium text-gray-700 mb-1">
@@ -555,7 +555,7 @@ const OrderForm = () => {
             </div>
           )}
           {orderData.custom_columns.length === 0 && (
-            <p className="text-sm text-gray-500">Belum ada kolom kustom. Klik "Tambah Kolom Baru" untuk menambahkan.</p>
+            <p className="text-sm text-gray-500">Belum ada kolom kustom. Klik &quot;Tambah Kolom Baru&quot; untuk menambahkan.</p>
           )}
         </div>
 
@@ -593,20 +593,7 @@ const OrderForm = () => {
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Client Code
-                      </label>
-                      <input
-                        type="text"
-                        value={item.client_code}
-                        onChange={(e) => handleItemChange(index, 'client_code', e.target.value)}
-                        className="input-field"
-                        placeholder="Enter client code"
-                      />
-                    </div>
-
-                    <div className="lg:col-span-2">
+                    <div className="lg:col-span-3">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Product <span className="text-red-500">*</span>
                       </label>

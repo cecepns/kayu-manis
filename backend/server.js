@@ -127,7 +127,7 @@ app.get('/api/products', async (req, res) => {
 app.get('/api/products/select', async (req, res) => {
   try {
     const [products] = await db.execute(
-      'SELECT id, km_code, description, cbm, fob_price, gross_weight, net_weight, total_gw, total_nw, picture_url, size_width, size_depth, size_height, packing_width, packing_depth, packing_height, color FROM products ORDER BY km_code'
+      'SELECT id, client_code, km_code, description, cbm, fob_price, gross_weight, net_weight, total_gw, total_nw, picture_url, size_width, size_depth, size_height, packing_width, packing_depth, packing_height, color FROM products ORDER BY km_code'
     );
 
     res.json({ products });
@@ -158,7 +158,7 @@ app.get('/api/products/:id', async (req, res) => {
 app.post('/api/products', upload.single('picture'), async (req, res) => {
   try {
     const {
-      km_code, description, size_width, size_depth, size_height,
+      client_code, km_code, description, size_width, size_depth, size_height,
       packing_width, packing_depth, packing_height, cbm, color,
       gross_weight, net_weight, total_gw, total_nw, fob_price, total_price, hs_code
     } = req.body;
@@ -190,12 +190,12 @@ app.post('/api/products', upload.single('picture'), async (req, res) => {
 
     const [result] = await db.execute(`
       INSERT INTO products (
-        km_code, description, picture_url, size_width, size_depth, size_height,
+        client_code, km_code, description, picture_url, size_width, size_depth, size_height,
         packing_width, packing_depth, packing_height, cbm, color,
         gross_weight, net_weight, total_gw, total_nw, fob_price, total_price, hs_code
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      km_code, description, picture_url, size_width, size_depth, size_height,
+      client_code || null, km_code, description, picture_url, size_width, size_depth, size_height,
       packing_width, packing_depth, packing_height, calculatedCBM || cbm, color,
       gross_weight, net_weight, calculatedTotalGW || total_gw, calculatedTotalNW || total_nw || null, 
       fob_price, calculatedTotalPrice || total_price, hs_code
@@ -214,7 +214,7 @@ app.post('/api/products', upload.single('picture'), async (req, res) => {
 app.put('/api/products/:id', upload.single('picture'), async (req, res) => {
   try {
     const {
-      km_code, description, size_width, size_depth, size_height,
+      client_code, km_code, description, size_width, size_depth, size_height,
       packing_width, packing_depth, packing_height, cbm, color,
       gross_weight, net_weight, total_gw, total_nw, fob_price, total_price, hs_code
     } = req.body;
@@ -264,7 +264,7 @@ app.put('/api/products/:id', upload.single('picture'), async (req, res) => {
 
     await db.execute(`
       UPDATE products SET 
-        km_code = ?, description = ?, picture_url = ?, 
+        client_code = ?, km_code = ?, description = ?, picture_url = ?, 
         size_width = ?, size_depth = ?, size_height = ?,
         packing_width = ?, packing_depth = ?, packing_height = ?, 
         cbm = ?, color = ?, gross_weight = ?, net_weight = ?, total_gw = ?, total_nw = ?,
@@ -272,7 +272,7 @@ app.put('/api/products/:id', upload.single('picture'), async (req, res) => {
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, [
-      km_code, description, picture_url, size_width, size_depth, size_height,
+      client_code || null, km_code, description, picture_url, size_width, size_depth, size_height,
       packing_width, packing_depth, packing_height, calculatedCBM || cbm, color,
       gross_weight, net_weight, calculatedTotalGW || total_gw, calculatedTotalNW || total_nw || null, 
       fob_price, calculatedTotalPrice || total_price, hs_code,
