@@ -5,6 +5,7 @@ import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import { ordersAPI } from "../../utils/apiOrders";
 import LoadingSpinner from "../../components/common/LoadingSpinner";
+import logo from "../../assets/logo.jpeg";
 
 const ReportDetail = () => {
   const { id } = useParams();
@@ -77,17 +78,88 @@ const ReportDetail = () => {
     // Helper to create fixed-length row values (21 columns)
     const createRowValues = () => Array(21).fill("");
 
+    // Company letterhead (logo + address)
+    const letterheadRow = worksheet.addRow(createRowValues());
+    // Make letterhead taller so all address lines have enough space
+    letterheadRow.height = 110;
+    // Leave columns 1-3 for logo / spacing, put text starting at column 4
+    worksheet.mergeCells(letterheadRow.number, 4, letterheadRow.number, 12);
+    const letterheadCell = letterheadRow.getCell(4);
+    letterheadCell.value = {
+      richText: [
+        { text: "CV Kayu Manis\n", font: { bold: true, size: 14 } },
+        {
+          text: "Furniture Manufacturer & Exporter\n",
+          font: { bold: true, size: 12 },
+        },
+        {
+          text:
+            "Jl.Monumen TNI AU No.8, Donoloyo, Tamanan, Banguntapan, Bantul 55191, Yogyakarta\n",
+          font: { size: 11 },
+        },
+        {
+          text: "Phone : +62-274-7471285,  Fax : +62-274-412217\n",
+          font: { size: 11 },
+        },
+        {
+          text: "E-mail : cvkayumanis@hotmail.com\n",
+          font: { size: 11 },
+        },
+        {
+          text: "www.kayumanis.asia",
+          font: { size: 11, color: { argb: "FF800000" } },
+        },
+      ],
+    };
+    letterheadCell.alignment = {
+      horizontal: "left",
+      vertical: "middle",
+      wrapText: true,
+    };
+
+    // Add logo image on the left of the letterhead
+    try {
+      const logoInfo = await fetchImageInfo(logo);
+      if (logoInfo?.base64) {
+        const logoId = workbook.addImage({
+          base64: logoInfo.base64,
+          extension: "jpeg",
+        });
+        const targetHeight = 70;
+        let targetWidth = 70;
+        if (logoInfo.width && logoInfo.height) {
+          const ratio = logoInfo.width / logoInfo.height;
+          targetWidth = targetHeight * ratio;
+        }
+        worksheet.addImage(logoId, {
+          // Keep logo fully in columns 1-3 area
+          tl: { col: 0.2, row: letterheadRow.number - 1 + 0.3 },
+          ext: { width: targetWidth, height: targetHeight },
+          editAs: "oneCell",
+        });
+        // Make first columns wide enough for logo and spacing
+        worksheet.getColumn(1).width = 26;
+        worksheet.getColumn(2).width = 6;
+        worksheet.getColumn(3).width = 4;
+      }
+    } catch (e) {
+      console.error("Error adding logo to Excel letterhead:", e);
+    }
+
+    // Blank row after letterhead
+    worksheet.addRow([]);
+
     // Title row
-    const titleRow = worksheet.addRow(["PACKING LIST & INVOICE"]);
+    const titleRow = worksheet.addRow(["Packing List & Invoice"]);
     worksheet.mergeCells(titleRow.number, 1, titleRow.number, 21);
     titleRow.height = 24;
     titleRow.eachCell((cell) => {
-      cell.font = { bold: true, size: 14 };
+      cell.font = { bold: true, size: 14, underline: true };
       cell.alignment = { horizontal: "center", vertical: "middle" };
     });
 
     // PI Number row (below title)
-    const piNumberRow = worksheet.addRow(["PI Number: " + (order.no_pi || "")]);
+    const piNumberRow = worksheet.addRow(["NO PI : " + (order.no_pi || "")]);
     worksheet.mergeCells(piNumberRow.number, 1, piNumberRow.number, 21);
     piNumberRow.height = 20;
     piNumberRow.eachCell((cell) => {
@@ -109,16 +181,9 @@ const ReportDetail = () => {
       }
     });
 
-    // Buyer name row with Date (first row after header - no empty space)
+    // Buyer name row (left side only)
     const buyerNameAndDateValues = createRowValues();
     buyerNameAndDateValues[0] = order.buyer_name || "";
-    buyerNameAndDateValues[11] = "Date:";
-    const dateValue = order.invoice_date
-      ? new Date(order.invoice_date).toLocaleDateString()
-      : order.created_at
-      ? new Date(order.created_at).toLocaleDateString()
-      : "-";
-    buyerNameAndDateValues[12] = dateValue;
     const buyerNameAndDateRow = worksheet.addRow(buyerNameAndDateValues);
     worksheet.mergeCells(
       buyerNameAndDateRow.number,
@@ -127,7 +192,7 @@ const ReportDetail = () => {
       10
     );
 
-    // Buyer address row with Volume
+    // Buyer address row with Volume (first line of Invoice Information)
     const buyerAddressAndVolumeValues = createRowValues();
     buyerAddressAndVolumeValues[0] = order.buyer_address || "";
     buyerAddressAndVolumeValues[11] = "Volume:";
@@ -145,15 +210,50 @@ const ReportDetail = () => {
       10
     );
 
+    // Style Volume label & value as bold
+    buyerAddressAndVolumeRow.eachCell((cell, colNumber) => {
+      if (colNumber === 11 || colNumber === 12) {
+        cell.font = { bold: true };
+      }
+    });
+
+    // Port of Loading row (second line of Invoice Information)
     const portLoadingRowValues = createRowValues();
     portLoadingRowValues[11] = "Port of Loading:";
     portLoadingRowValues[12] = order.port_loading || "-";
-    worksheet.addRow(portLoadingRowValues);
+    const portLoadingRow = worksheet.addRow(portLoadingRowValues);
+    portLoadingRow.eachCell((cell, colNumber) => {
+      if (colNumber === 11 || colNumber === 12) {
+        cell.font = { bold: true };
+      }
+    });
 
+    // Destination Port row (third line of Invoice Information)
     const destinationPortRowValues = createRowValues();
     destinationPortRowValues[11] = "Destination Port:";
     destinationPortRowValues[12] = order.destination_port || "-";
-    worksheet.addRow(destinationPortRowValues);
+    const destinationPortRow = worksheet.addRow(destinationPortRowValues);
+    destinationPortRow.eachCell((cell, colNumber) => {
+      if (colNumber === 11 || colNumber === 12) {
+        cell.font = { bold: true };
+      }
+    });
+
+    // Date row (fourth line of Invoice Information)
+    const dateRowValues = createRowValues();
+    dateRowValues[11] = "Date:";
+    const dateValue = order.invoice_date
+      ? new Date(order.invoice_date).toLocaleDateString()
+      : order.created_at
+      ? new Date(order.created_at).toLocaleDateString()
+      : "-";
+    dateRowValues[12] = dateValue;
+    const dateRow = worksheet.addRow(dateRowValues);
+    dateRow.eachCell((cell, colNumber) => {
+      if (colNumber === 11 || colNumber === 12) {
+        cell.font = { bold: true };
+      }
+    });
 
     // Blank row before table headers
     worksheet.addRow([]);
@@ -268,7 +368,7 @@ const ReportDetail = () => {
           vertical: "middle",
           wrapText: true,
         };
-        cell.font = { bold: true };
+        cell.font = { bold: true, color: { argb: "FF800000" } };
         cell.fill = headerFill;
         cell.border = {
           top: { style: "thin" },
@@ -309,13 +409,13 @@ const ReportDetail = () => {
     });
 
     // Helper: fetch image as base64 + original dimensions
-    const fetchImageInfo = async (url) => {
+    async function fetchImageInfo(url) {
       if (!url) return null;
       try {
         const response = await fetch(url);
         if (!response.ok) return null;
         const blob = await response.blob();
-        return new Promise((resolve, reject) => {
+        return await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onloadend = () => {
             const result = reader.result;
@@ -346,7 +446,7 @@ const ReportDetail = () => {
         console.error("Error fetching image for Excel:", e);
         return null;
       }
-    };
+    }
 
     // Data rows with images
     const baseUrlForImages = "http://api-inventory.isavralabel.com/kayu-manis-properti";
@@ -458,7 +558,7 @@ const ReportDetail = () => {
     ]);
 
     summaryRow.eachCell((cell, colNumber) => {
-      cell.font = { bold: true };
+      cell.font = { bold: true, color: { argb: "FF800000" } };
       cell.fill = headerFill;
       cell.border = {
         top: { style: "thin" },
@@ -483,7 +583,15 @@ const ReportDetail = () => {
     const blob = new Blob([buffer], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
-    const fileName = `PackingList_${order.no_pi || "report"}.xlsx`;
+
+    // Filename format: idOrder_tanggalsekarang (ddmmyyyy)
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    const formattedDate = `${pad(now.getDate())}${pad(
+      now.getMonth() + 1
+    )}${now.getFullYear()}`;
+    const fileName = `${order.id || "order"}_${formattedDate}.xlsx`;
+
     saveAs(blob, fileName);
   };
 
@@ -499,11 +607,11 @@ const ReportDetail = () => {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+            <h1 className="text-2xl sm:text-3xl font-bold">
               Packing List & Invoice
             </h1>
             <p className="text-sm sm:text-base text-gray-600 mt-1">
-              PI Number: {order.no_pi}
+              NO PI : {order.no_pi}
             </p>
           </div>
         </div>
@@ -522,30 +630,46 @@ const ReportDetail = () => {
 
       {/* Report Content */}
       <div className="bg-white p-3 sm:p-5 print:p-5">
-        {/* Company Header */}
-        <div className="text-center border-b-2 border-gray-300 pb-4 sm:pb-6 mb-4 sm:mb-6 print:mb-4 print:pb-6">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
-            FURNITURE EXPORT COMPANY
-          </h1>
-          <p className="text-sm sm:text-base text-gray-600">
-            Professional Furniture Manufacturing & Export
-          </p>
-          {/* <div className="mt-4 text-sm text-gray-500">
-            <p>
-              Address: Industrial Zone, Export City | Phone: +1 234 567 8900 |
-              Email: export@furniture.com
-            </p>
-          </div> */}
+        {/* Company Header / Letterhead */}
+        <div className="border-b-2 border-gray-300 pb-4 sm:pb-6 mb-4 sm:mb-6 print:mb-4 print:pb-6">
+          <div className="flex items-center gap-4 sm:gap-6">
+            <img
+              src={logo}
+              alt="CV Kayu Manis"
+              className="h-16 sm:h-20 object-contain"
+            />
+            <div className="text-left">
+              <h1 className="text-lg sm:text-xl font-bold text-gray-900">
+                CV Kayu Manis
+              </h1>
+              <p className="text-sm sm:text-base font-semibold text-gray-800">
+                Furniture Manufacturer & Exporter
+              </p>
+              <p className="text-xs sm:text-sm text-gray-700">
+                Jl.Monumen TNI AU No.8, Donoloyo, Tamanan, Banguntapan, Bantul
+                55191, Yogyakarta
+              </p>
+              <p className="text-xs sm:text-sm text-gray-700">
+                Phone : +62-274-7471285, Fax : +62-274-412217
+              </p>
+              <p className="text-xs sm:text-sm text-gray-700">
+                E-mail : cvkayumanis@hotmail.com
+              </p>
+              <p className="text-xs sm:text-sm text-[#800000]">
+                www.kayumanis.asia
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Document Title */}
         <div className="text-center mb-4 sm:mb-6">
-          <h2 className="text-lg sm:text-xl font-bold text-gray-900 bg-yellow-100 py-2 px-3 sm:px-4 inline-block">
-            PACKING LIST & INVOICE
+          <h2 className="text-lg sm:text-xl font-bold underline py-2 px-3 sm:px-4 inline-block">
+            Packing List & Invoice
           </h2>
           <div className="mt-2 sm:mt-3">
             <span className="text-xs sm:text-sm font-medium text-gray-700">
-              PI Number: {order.no_pi}
+              NO PI : {order.no_pi}
             </span>
           </div>
         </div>
@@ -572,29 +696,37 @@ const ReportDetail = () => {
             </h3>
             <div className="space-y-1 text-sm">
               <div className="flex">
-                <span className="w-28 text-gray-600">Date:</span>
-                <span className="font-medium">
+                <span className="w-28 text-gray-900 font-semibold">
+                  Volume:
+                </span>
+                <span className="font-semibold text-gray-900">
+                  {order.volume ? `${order.volume} CBM` : summary.totalCBM}
+                </span>
+              </div>
+              <div className="flex">
+                <span className="w-28 text-gray-900 font-semibold">
+                  Port of Loading:
+                </span>
+                <span className="font-semibold text-gray-900">
+                  {order.port_loading || "-"}
+                </span>
+              </div>
+              <div className="flex">
+                <span className="w-28 text-gray-900 font-semibold">
+                  Destination Port:
+                </span>
+                <span className="font-semibold text-gray-900">
+                  {order.destination_port || "-"}
+                </span>
+              </div>
+              <div className="flex">
+                <span className="w-28 text-gray-900 font-semibold">Date:</span>
+                <span className="font-semibold text-gray-900">
                   {order.invoice_date
                     ? new Date(order.invoice_date).toLocaleDateString()
                     : order.created_at
                     ? new Date(order.created_at).toLocaleDateString()
                     : "-"}
-                </span>
-              </div>
-              <div className="flex">
-                <span className="w-28 text-gray-600">Volume:</span>
-                <span className="font-medium">
-                  {order.volume ? `${order.volume} CBM` : summary.totalCBM}
-                </span>
-              </div>
-              <div className="flex">
-                <span className="w-28 text-gray-600">Port of Loading:</span>
-                <span className="font-medium">{order.port_loading || "-"}</span>
-              </div>
-              <div className="flex">
-                <span className="w-28 text-gray-600">Destination Port:</span>
-                <span className="font-medium">
-                  {order.destination_port || "-"}
                 </span>
               </div>
             </div>
@@ -606,7 +738,7 @@ const ReportDetail = () => {
           <div className="align-middle px-3 sm:px-5 print:px-0">
             <table className="table-responsive border-collapse border border-gray-300 text-sm">
               <thead>
-                <tr className="bg-yellow-100">
+                <tr className="bg-yellow-100 text-[#800000]">
                   <th
                     className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs"
                     rowSpan="2"
@@ -695,7 +827,7 @@ const ReportDetail = () => {
                     </th>
                   ))}
                 </tr>
-                <tr className="bg-yellow-100">
+                <tr className="bg-yellow-100 text-[#800000]">
                   <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
                     W
                   </th>

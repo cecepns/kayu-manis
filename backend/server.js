@@ -20,9 +20,10 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 // Multer configuration for image uploads
+// Use absolute path based on __dirname so it works both locally and in hosting
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'uploads-furniture/');
+    cb(null, uploadsDir);
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
