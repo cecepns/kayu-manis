@@ -127,21 +127,33 @@ const OrderForm = () => {
       const qty = parseInt(updatedItems[index].qty) || 0;
       
       if (product && qty > 0 && productId) {
-        // Calculate CBM from packing dimensions: W x D x H x QTY / 1,000,000
+        // Calculate CBM:
+        // 1. Prefer packing dimensions: W x D x H x QTY / 1,000,000
+        // 2. Fallback to product.cbm * QTY if packing dimensions are not available
         let cbmTotal = 0;
+
         if (product.packing_width && product.packing_depth && product.packing_height) {
           const width = parseFloat(product.packing_width) || 0;
           const depth = parseFloat(product.packing_depth) || 0;
           const height = parseFloat(product.packing_height) || 0;
           if (width > 0 && depth > 0 && height > 0) {
-            cbmTotal = ((width * depth * height * qty) / 1000000).toFixed(4);
+            cbmTotal = (width * depth * height * qty) / 1000000;
           }
         }
+
+        // If packing dimensions are not set or result is 0, use product.cbm as fallback
+        if ((!cbmTotal || cbmTotal === 0) && product.cbm) {
+          const productCbm = parseFloat(product.cbm) || 0;
+          cbmTotal = productCbm * qty;
+        }
+
+        // Ensure cbm_total is always stored with 4 decimal places as string
+        const cbmTotalFormatted = parseFloat(cbmTotal || 0).toFixed(4);
 
         updatedItems[index] = {
           ...updatedItems[index],
           product_id: productId,
-          cbm_total: cbmTotal,
+          cbm_total: cbmTotalFormatted,
           fob_total_usd: (parseFloat(product.fob_price) * qty).toFixed(2),
           gross_weight_total: (parseFloat(product.gross_weight || 0) * qty).toFixed(2),
           net_weight_total: (parseFloat(product.net_weight || 0) * qty).toFixed(2),
