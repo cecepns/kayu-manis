@@ -31,6 +31,7 @@ const OrderForm = () => {
     items: [
       {
         product_id: '',
+        client_code: null,
         qty: 1,
         cbm_total: 0,
         fob_total_usd: 0,
@@ -152,6 +153,7 @@ const OrderForm = () => {
         updatedItems[index] = {
           ...updatedItems[index],
           product_id: productId,
+          client_code: product.client_code || null,
           cbm_total: cbmTotalFormatted,
           fob_total_usd: (parseFloat(product.fob_price) * qty).toFixed(2),
           gross_weight_total: (parseFloat(product.gross_weight || 0) * qty).toFixed(2),
@@ -164,6 +166,7 @@ const OrderForm = () => {
         // Reset calculations when product is cleared
         updatedItems[index] = {
           ...updatedItems[index],
+          client_code: null,
           cbm_total: 0,
           fob_total_usd: 0,
           gross_weight_total: 0,
@@ -188,6 +191,7 @@ const OrderForm = () => {
         ...prev.items,
         {
           product_id: '',
+          client_code: null,
           qty: 1,
           cbm_total: 0,
           fob_total_usd: 0,
@@ -341,22 +345,57 @@ const OrderForm = () => {
     }
   };
 
+  const sanitizeOrderData = (data) => {
+    // Helper to convert undefined to null (preserves 0, false, empty string)
+    const nullIfUndefined = (value) => value === undefined ? null : value;
+    // Helper to convert empty string to null for optional fields
+    const nullIfEmpty = (value) => (value === undefined || value === '' || value === null) ? null : value;
+    
+    return {
+      ...data,
+      volume: nullIfEmpty(data.volume),
+      port_loading: nullIfEmpty(data.port_loading),
+      destination_port: nullIfEmpty(data.destination_port),
+      custom_columns: data.custom_columns && data.custom_columns.length > 0 && data.custom_columns.some(col => col && col.trim()) 
+        ? data.custom_columns 
+        : null,
+      items: data.items.map(item => ({
+        product_id: item.product_id || null,
+        client_code: nullIfEmpty(item.client_code),
+        qty: item.qty || null,
+        cbm_total: nullIfUndefined(item.cbm_total),
+        fob_total_usd: nullIfUndefined(item.fob_total_usd),
+        gross_weight_total: nullIfUndefined(item.gross_weight_total),
+        net_weight_total: nullIfUndefined(item.net_weight_total),
+        total_gw_total: nullIfUndefined(item.total_gw_total),
+        total_nw_total: nullIfUndefined(item.total_nw_total),
+        fob: nullIfEmpty(item.fob),
+        custom_column_values: item.custom_column_values && Object.keys(item.custom_column_values).length > 0 
+          ? item.custom_column_values 
+          : null
+      }))
+    };
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     try {
       setSaving(true);
       
+      // Sanitize data to ensure no undefined values
+      const sanitizedData = sanitizeOrderData(orderData);
+      
       if (isEdit) {
-        await ordersAPI.updateOrder(id, orderData);
+        await ordersAPI.updateOrder(id, sanitizedData);
       } else {
-        await ordersAPI.createOrder(orderData);
+        await ordersAPI.createOrder(sanitizedData);
       }
       
       navigate('/app/orders');
     } catch (error) {
       console.error('Error saving order:', error);
-      alert('Error saving order');
+      alert(error.details || error.message || 'Error saving order');
     } finally {
       setSaving(false);
     }
@@ -660,7 +699,13 @@ const OrderForm = () => {
                           )}
                         </div>
                         
-                        <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                          <div>
+                            <span className="text-gray-500">Client Code:</span>
+                            <div className="font-medium">
+                              {selectedProduct.client_code || '-'}
+                            </div>
+                          </div>
                           <div>
                             <span className="text-gray-500">Size:</span>
                             <div className="font-medium">

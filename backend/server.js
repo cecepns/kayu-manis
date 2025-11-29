@@ -80,6 +80,9 @@ const handleDbError = (error, res, operation) => {
   });
 };
 
+// Helper function to convert undefined to null (for SQL bind parameters)
+const nullIfUndefined = (value) => value === undefined ? null : value;
+
 // Products API Routes
 // Get products with pagination and search
 app.get('/api/products', async (req, res) => {
@@ -478,9 +481,17 @@ app.post('/api/orders', async (req, res) => {
           fob, custom_column_values
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
-        orderId, item.product_id, item.client_code, item.qty, item.cbm_total,
-        item.fob_total_usd, item.gross_weight_total, item.net_weight_total, item.total_gw_total,
-        item.total_nw_total || null, item.fob || null,
+        orderId,
+        nullIfUndefined(item.product_id),
+        nullIfUndefined(item.client_code),
+        nullIfUndefined(item.qty),
+        nullIfUndefined(item.cbm_total),
+        nullIfUndefined(item.fob_total_usd),
+        nullIfUndefined(item.gross_weight_total),
+        nullIfUndefined(item.net_weight_total),
+        nullIfUndefined(item.total_gw_total),
+        nullIfUndefined(item.total_nw_total),
+        nullIfUndefined(item.fob),
         item.custom_column_values ? JSON.stringify(item.custom_column_values) : null
       ]);
     }
@@ -547,9 +558,17 @@ app.put('/api/orders/:id', async (req, res) => {
           fob, custom_column_values
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
-        req.params.id, item.product_id, item.client_code, item.qty, item.cbm_total,
-        item.fob_total_usd, item.gross_weight_total, item.net_weight_total, item.total_gw_total,
-        item.total_nw_total || null, item.fob || null,
+        req.params.id,
+        nullIfUndefined(item.product_id),
+        nullIfUndefined(item.client_code),
+        nullIfUndefined(item.qty),
+        nullIfUndefined(item.cbm_total),
+        nullIfUndefined(item.fob_total_usd),
+        nullIfUndefined(item.gross_weight_total),
+        nullIfUndefined(item.net_weight_total),
+        nullIfUndefined(item.total_gw_total),
+        nullIfUndefined(item.total_nw_total),
+        nullIfUndefined(item.fob),
         item.custom_column_values ? JSON.stringify(item.custom_column_values) : null
       ]);
     }

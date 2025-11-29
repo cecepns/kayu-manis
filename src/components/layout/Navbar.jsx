@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Package, User, LogOut, Menu } from 'lucide-react';
 import PropTypes from 'prop-types';
 
-const Navbar = ({ onMenuClick }) => {
+const Navbar = ({ onMenuClick = () => {} }) => {
   const navigate = useNavigate();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [username, setUsername] = useState('');
@@ -104,10 +104,6 @@ const Navbar = ({ onMenuClick }) => {
 
 Navbar.propTypes = {
   onMenuClick: PropTypes.func,
-};
-
-Navbar.defaultProps = {
-  onMenuClick: () => {},
 };
 
 export default Navbar;
