@@ -129,6 +129,14 @@ const ProductForm = () => {
     setFormData(updatedFormData);
   };
 
+  // Prevent scroll wheel from changing number input values
+  const handleNumberInputWheel = (e) => {
+    // Prevent default scroll behavior that increments/decrements the number
+    e.preventDefault();
+    // Blur the input to allow page scrolling
+    e.target.blur();
+  };
+
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -387,6 +395,7 @@ const ProductForm = () => {
                         name={field.name}
                         value={formData[field.name]}
                         onChange={handleInputChange}
+                        onWheel={field.type === 'number' ? handleNumberInputWheel : undefined}
                         required={field.required}
                         step={field.step}
                         readOnly={field.readOnly}

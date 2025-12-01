@@ -290,6 +290,14 @@ const OrderForm = () => {
     });
   };
 
+  // Prevent scroll wheel from changing number input values
+  const handleNumberInputWheel = (e) => {
+    // Prevent default scroll behavior that increments/decrements the number
+    e.preventDefault();
+    // Blur the input to allow page scrolling
+    e.target.blur();
+  };
+
   const removeItem = (index) => {
     if (orderData.items.length > 1) {
       setOrderData(prev => ({
@@ -673,6 +681,7 @@ const OrderForm = () => {
                         type="number"
                         value={item.qty}
                         onChange={(e) => handleItemChange(index, 'qty', e.target.value)}
+                        onWheel={handleNumberInputWheel}
                         required
                         min="1"
                         className="input-field"
