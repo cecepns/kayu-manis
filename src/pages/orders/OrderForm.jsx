@@ -518,7 +518,7 @@ const OrderForm = () => {
             </div>
             <div>
               <label htmlFor="volume" className="block text-sm font-medium text-gray-700 mb-1">
-                Volume (CBM)
+                Container Volume
               </label>
               <select
                 id="volume"

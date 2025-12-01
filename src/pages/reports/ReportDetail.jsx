@@ -383,7 +383,7 @@ const ReportDetail = () => {
     const columnWidths = [
       5, // No
       12, // Client Code
-      12, // KM Code
+      18, // KM Code (increased width)
       18, // Picture
       30, // Description
       6, // Size W
@@ -401,7 +401,7 @@ const ReportDetail = () => {
       10, // Total NW
       12, // FOB
       14, // Total
-      12, // HS Code
+      18, // HS Code (increased width)
       ...Array(customColumns.length).fill(15), // Custom columns width
     ];
     columnWidths.forEach((width, index) => {
@@ -412,38 +412,118 @@ const ReportDetail = () => {
     async function fetchImageInfo(url) {
       if (!url) return null;
       try {
-        const response = await fetch(url);
-        if (!response.ok) return null;
+        const response = await fetch(url, {
+          mode: 'cors',
+          cache: 'no-cache'
+        });
+        if (!response.ok) {
+          console.warn(`Failed to fetch image: ${url}, status: ${response.status}`);
+          return null;
+        }
         const blob = await response.blob();
+        
+        // Detect image format from Content-Type or file extension
+        const contentType = blob.type || '';
+        const urlLower = url.toLowerCase();
+        let extension = 'jpeg'; // default
+        
+        if (contentType.includes('png') || urlLower.includes('.png')) {
+          extension = 'png';
+        } else if (contentType.includes('jpeg') || contentType.includes('jpg') || urlLower.includes('.jpg') || urlLower.includes('.jpeg')) {
+          extension = 'jpeg';
+        } else if (contentType.includes('avif') || urlLower.includes('.avif')) {
+          // AVIF needs to be converted to PNG/JPEG for ExcelJS
+          extension = 'png';
+        } else if (contentType.includes('webp') || urlLower.includes('.webp')) {
+          extension = 'png';
+        }
+
         return await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onloadend = () => {
             const result = reader.result;
             if (typeof result === "string") {
-              const base64 = result.split(",")[1];
-
               // Get intrinsic width/height so we can keep aspect ratio in Excel
               const image = new Image();
+              image.crossOrigin = 'anonymous';
+              
               image.onload = () => {
-                resolve({
-                  base64,
-                  width: image.width,
-                  height: image.height,
-                });
+                try {
+                  let finalBase64 = result.split(",")[1];
+                  let finalExtension = extension;
+                  
+                  // Convert AVIF/WebP to PNG using canvas if needed
+                  const needsConversion = contentType.includes('avif') || contentType.includes('webp') || 
+                      urlLower.includes('.avif') || urlLower.includes('.webp');
+                  
+                  if (needsConversion) {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = image.width;
+                    canvas.height = image.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(image, 0, 0);
+                    
+                    // Convert to PNG using Promise
+                    canvas.toBlob((convertedBlob) => {
+                      if (convertedBlob) {
+                        const reader2 = new FileReader();
+                        reader2.onloadend = () => {
+                          const pngResult = reader2.result;
+                          if (typeof pngResult === "string") {
+                            const convertedBase64 = pngResult.split(",")[1];
+                            resolve({
+                              base64: convertedBase64,
+                              width: image.width,
+                              height: image.height,
+                              extension: 'png',
+                            });
+                          } else {
+                            resolve(null);
+                          }
+                        };
+                        reader2.onerror = () => {
+                          console.error("Error reading converted image");
+                          resolve(null);
+                        };
+                        reader2.readAsDataURL(convertedBlob);
+                      } else {
+                        console.error("Failed to convert image to PNG");
+                        resolve(null);
+                      }
+                    }, 'image/png');
+                  } else {
+                    // Use original format
+                    resolve({
+                      base64: finalBase64,
+                      width: image.width,
+                      height: image.height,
+                      extension: finalExtension,
+                    });
+                  }
+                } catch (e) {
+                  console.error("Error processing image:", e);
+                  resolve(null);
+                }
               };
-              image.onerror = () => {
-                resolve({ base64, width: 0, height: 0 });
+              
+              image.onerror = (err) => {
+                console.error("Error loading image:", err);
+                resolve(null);
               };
+              
               image.src = result;
             } else {
               resolve(null);
             }
           };
-          reader.onerror = reject;
+          reader.onerror = (err) => {
+            console.error("Error reading image blob:", err);
+            reject(err);
+          };
           reader.readAsDataURL(blob);
         });
       } catch (e) {
-        console.error("Error fetching image for Excel:", e);
+        console.error("Error fetching image for Excel:", e, url);
         return null;
       }
     }
@@ -502,31 +582,52 @@ const ReportDetail = () => {
       });
 
       if (item.picture_url) {
-        const fullUrl = `${baseUrlForImages}${item.picture_url}`;
-        const imageInfo = await fetchImageInfo(fullUrl);
-        if (imageInfo?.base64) {
-          const imageId = workbook.addImage({
-            base64: imageInfo.base64,
-            extension: "jpeg", // assuming JPEG/AVIF converted; ExcelJS needs a common format
-          });
+        try {
+          const fullUrl = `${baseUrlForImages}${item.picture_url}`;
+          const imageInfo = await fetchImageInfo(fullUrl);
+          if (imageInfo?.base64) {
+            const imageId = workbook.addImage({
+              base64: imageInfo.base64,
+              extension: imageInfo.extension || "png", // Use detected extension
+            });
 
-          // Keep aspect ratio: scale image to a reasonable height in pixels
-          const targetHeight = 50; // px, should fit in row height ~60
-          let targetWidth = 50;
-          if (imageInfo.width && imageInfo.height) {
-            const ratio = imageInfo.width / imageInfo.height;
-            targetWidth = targetHeight * ratio;
+            // Keep aspect ratio: scale image to fit within the cell
+            // Column width 25 = approximately 187 pixels (at 96 DPI, 1 unit ≈ 7.5 pixels)
+            // Limit image width to ~150 pixels to stay within column bounds with padding
+            const maxImageWidth = 150; // pixels, to fit in column width 25
+            const maxImageHeight = 50; // px, should fit in row height ~60
+            let targetWidth = maxImageWidth;
+            let targetHeight = maxImageHeight;
+            
+            if (imageInfo.width && imageInfo.height && imageInfo.width > 0 && imageInfo.height > 0) {
+              const ratio = imageInfo.width / imageInfo.height;
+              
+              // Calculate dimensions maintaining aspect ratio
+              // Try to fit by height first
+              targetHeight = maxImageHeight;
+              targetWidth = targetHeight * ratio;
+              
+              // If too wide, scale down by width instead
+              if (targetWidth > maxImageWidth) {
+                targetWidth = maxImageWidth;
+                targetHeight = targetWidth / ratio;
+              }
+            }
+
+            // Place image centered in the cell, with padding to prevent overflow
+            worksheet.addImage(imageId, {
+              tl: {
+                col: pictureColumnIndex - 1 + 0.2, // More padding from left to prevent overflow
+                row: rowIndex - 1 + 0.15,
+              },
+              ext: { width: targetWidth, height: targetHeight },
+              editAs: "oneCell",
+            });
+          } else {
+            console.warn(`Failed to load image for item ${item.km_code}: ${fullUrl}`);
           }
-
-          // Place image starting slightly inside the cell
-          worksheet.addImage(imageId, {
-            tl: {
-              col: pictureColumnIndex - 1 + 0.15,
-              row: rowIndex - 1 + 0.15,
-            },
-            ext: { width: targetWidth, height: targetHeight },
-            editAs: "oneCell",
-          });
+        } catch (error) {
+          console.error(`Error adding image for item ${item.km_code}:`, error);
         }
       }
     }
