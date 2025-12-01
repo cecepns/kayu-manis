@@ -198,7 +198,7 @@ const ReportDetail = () => {
     buyerAddressAndVolumeValues[11] = "Volume:";
     buyerAddressAndVolumeValues[12] =
       order.volume && order.volume !== ""
-        ? `${order.volume} CBM`
+        ? `${order.volume} `
         : summary.totalCBM ?? "";
     const buyerAddressAndVolumeRow = worksheet.addRow(
       buyerAddressAndVolumeValues
@@ -801,7 +801,7 @@ const ReportDetail = () => {
                   Volume:
                 </span>
                 <span className="font-semibold text-gray-900">
-                  {order.volume ? `${order.volume} CBM` : summary.totalCBM}
+                  {order.volume ? `${order.volume}` : summary.totalCBM}
                 </span>
               </div>
               <div className="flex">
