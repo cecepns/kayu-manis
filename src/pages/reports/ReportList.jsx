@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { FileText, Eye } from 'lucide-react';
 import { ordersAPI } from '../../utils/apiOrders';
@@ -14,12 +14,9 @@ const ReportList = () => {
   const [totalItems, setTotalItems] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const itemsPerPage = 10;
+  const previousSearchTermRef = useRef(searchTerm);
 
-  useEffect(() => {
-    loadOrders();
-  }, [currentPage, searchTerm]);
-
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     try {
       setLoading(true);
       const response = await ordersAPI.getOrders(currentPage, itemsPerPage, searchTerm);
@@ -31,12 +28,25 @@ const ReportList = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, searchTerm, itemsPerPage]);
 
-  const handleSearch = (search) => {
-    setSearchTerm(search);
-    setCurrentPage(1);
-  };
+  useEffect(() => {
+    loadOrders();
+  }, [loadOrders]);
+
+  const handleSearch = useCallback((search) => {
+    // Only update if search term actually changed
+    const trimmedSearch = search.trim();
+    const trimmedPrevious = (previousSearchTermRef.current || '').trim();
+    
+    if (trimmedSearch !== trimmedPrevious) {
+      previousSearchTermRef.current = search;
+      setSearchTerm(search);
+      // Only reset to page 1 if search term actually changed
+      setCurrentPage(1);
+    }
+    // If search term didn't change, do nothing (avoid unnecessary re-renders and page resets)
+  }, []);
 
   if (loading) {
     return <LoadingSpinner text="Loading reports..." />;
@@ -57,6 +67,7 @@ const ReportList = () => {
         <div className="flex flex-col sm:flex-row gap-4">
           <SearchBar 
             onSearch={handleSearch}
+            value={searchTerm}
             placeholder="Search reports by PI number, buyer name..."
             className="flex-1"
           />

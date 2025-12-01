@@ -196,7 +196,7 @@ app.post('/api/products', upload.single('picture'), async (req, res) => {
         client_code, km_code, description, picture_url, size_width, size_depth, size_height,
         packing_width, packing_depth, packing_height, cbm, color,
         gross_weight, net_weight, total_gw, total_nw, fob_price, total_price, hs_code
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       client_code || null, km_code, description, picture_url, size_width, size_depth, size_height,
       packing_width, packing_depth, packing_height, calculatedCBM || cbm, color,

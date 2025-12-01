@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, PencilIcon, Trash2, Package } from 'lucide-react';
 import { productsAPI } from '../../utils/apiProducts';
@@ -14,12 +14,9 @@ const ProductList = () => {
   const [totalItems, setTotalItems] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const itemsPerPage = 10;
+  const previousSearchTermRef = useRef(searchTerm);
 
-  useEffect(() => {
-    loadProducts();
-  }, [currentPage, searchTerm]);
-
-  const loadProducts = async () => {
+  const loadProducts = useCallback(async () => {
     try {
       setLoading(true);
       const response = await productsAPI.getProducts(currentPage, itemsPerPage, searchTerm);
@@ -31,7 +28,11 @@ const ProductList = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, searchTerm, itemsPerPage]);
+
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
 
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this product?')) {
@@ -59,10 +60,19 @@ const ProductList = () => {
     }
   };
 
-  const handleSearch = (search) => {
-    setSearchTerm(search);
-    setCurrentPage(1);
-  };
+  const handleSearch = useCallback((search) => {
+    // Only update if search term actually changed
+    const trimmedSearch = search.trim();
+    const trimmedPrevious = (previousSearchTermRef.current || '').trim();
+    
+    if (trimmedSearch !== trimmedPrevious) {
+      previousSearchTermRef.current = search;
+      setSearchTerm(search);
+      // Only reset to page 1 if search term actually changed
+      setCurrentPage(1);
+    }
+    // If search term didn't change, do nothing (avoid unnecessary re-renders and page resets)
+  }, []);
 
   if (loading) {
     return <LoadingSpinner text="Loading products..." />;
@@ -88,6 +98,7 @@ const ProductList = () => {
         <div className="flex flex-col sm:flex-row gap-4">
           <SearchBar 
             onSearch={handleSearch}
+            value={searchTerm}
             placeholder="Search products by KM Code, description..."
             className="flex-1"
           />
