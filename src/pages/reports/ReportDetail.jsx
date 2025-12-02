@@ -12,6 +12,12 @@ const ReportDetail = () => {
   const navigate = useNavigate();
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState({
+    current: 0,
+    total: 0,
+    message: "",
+  });
 
   const loadReportData = useCallback(async () => {
     try {
@@ -72,8 +78,19 @@ const ReportDetail = () => {
   const handleExportExcel = async () => {
     if (!items || !Array.isArray(items)) return;
 
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Packing List");
+    setExporting(true);
+    setExportProgress({ current: 0, total: 100, message: "Preparing export..." });
+
+    try {
+      // Helper function to convert value to number if possible
+      const toNumber = (value) => {
+        if (value === null || value === undefined || value === "") return null;
+        const num = typeof value === "string" ? parseFloat(value) : Number(value);
+        return isNaN(num) ? null : num;
+      };
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Packing List");
 
     // Helper to create fixed-length row values (21 columns)
     const createRowValues = () => Array(21).fill("");
@@ -118,6 +135,7 @@ const ReportDetail = () => {
     };
 
     // Add logo image on the left of the letterhead
+    setExportProgress({ current: 10, total: 100, message: "Adding logo..." });
     try {
       const logoInfo = await fetchImageInfo(logo);
       if (logoInfo?.base64) {
@@ -257,6 +275,8 @@ const ReportDetail = () => {
 
     // Blank row before table headers
     worksheet.addRow([]);
+
+    setExportProgress({ current: 20, total: 100, message: "Setting up headers..." });
 
     // Header rows
     const customColumns = order.custom_columns
@@ -529,11 +549,21 @@ const ReportDetail = () => {
     }
 
     // Data rows with images
-    const baseUrlForImages = "http://api-inventory.isavralabel.com/kayu-manis-properti";
+    const baseUrlForImages = "https://api-inventory.isavralabel.com/kayu-manis-properti";
     const pictureColumnIndex = 4; // "Picture" column
+
+    setExportProgress({ current: 30, total: 100, message: "Processing items..." });
 
     for (let index = 0; index < items.length; index++) {
       const item = items[index];
+      
+      // Update progress for each item
+      const itemProgress = 30 + Math.floor((index / items.length) * 50);
+      setExportProgress({
+        current: itemProgress,
+        total: 100,
+        message: `Processing item ${index + 1} of ${items.length}...`,
+      });
 
       // Parse custom_column_values if it's a string
       const customValues = item.custom_column_values
@@ -543,28 +573,32 @@ const ReportDetail = () => {
         : {};
 
       const row = worksheet.addRow([
-        index + 1,
+        index + 1, // No - already number
         item.client_code || "-",
         item.km_code || "",
         "", // picture handled separately
         item.description || "",
-        item.size_width ?? "",
-        item.size_depth ?? "",
-        item.size_height ?? "",
-        item.packing_width ?? "",
-        item.packing_depth ?? "",
-        item.packing_height ?? "",
+        toNumber(item.size_width), // Size W - number
+        toNumber(item.size_depth), // Size D - number
+        toNumber(item.size_height), // Size H - number
+        toNumber(item.packing_width), // Packing W - number
+        toNumber(item.packing_depth), // Packing D - number
+        toNumber(item.packing_height), // Packing H - number
         item.color || "",
-        item.qty ?? "",
-        item.cbm_total ?? "",
-        item.gross_weight_total ?? "",
-        item.net_weight_total ?? "",
-        item.total_gw_total ?? "",
-        item.total_nw_total ?? "",
-        item.fob || item.fob_price || "",
-        item.fob_total_usd || item.fob_total || "",
+        toNumber(item.qty), // Qty - number
+        toNumber(item.cbm_total), // CBM - number
+        toNumber(item.gross_weight_total), // Gross W - number
+        toNumber(item.net_weight_total), // Net W - number
+        toNumber(item.total_gw_total), // Total GW - number
+        toNumber(item.total_nw_total), // Total NW - number
+        toNumber(item.fob || item.fob_price), // FOB - number
+        toNumber(item.fob_total_usd || item.fob_total), // Total - number
         item.hs_code || "",
-        ...customColumns.map((col) => customValues[col] || ""), // Add custom column values
+        ...customColumns.map((col) => {
+          const val = customValues[col];
+          // Try to convert custom column values to number if they look like numbers
+          return val ? toNumber(val) ?? val : "";
+        }),
       ]);
 
       const rowIndex = row.number;
@@ -632,6 +666,8 @@ const ReportDetail = () => {
       }
     }
 
+    setExportProgress({ current: 85, total: 100, message: "Adding summary..." });
+
     // Summary row
     const summaryRow = worksheet.addRow([
       "TOTAL",
@@ -647,13 +683,13 @@ const ReportDetail = () => {
       "",
       "",
       "",
-      summary.totalCBM ?? "",
-      summary.totalGrossWeight ?? "",
-      summary.totalNetWeight ?? "",
-      summary.totalGW ?? "",
-      summary.totalNW ?? "",
+      toNumber(summary.totalCBM), // CBM - number
+      toNumber(summary.totalGrossWeight), // Gross Weight - number
+      toNumber(summary.totalNetWeight), // Net Weight - number
+      toNumber(summary.totalGW), // Total GW - number
+      toNumber(summary.totalNW), // Total NW - number
       "",
-      summary.totalUSD ?? "",
+      toNumber(summary.totalUSD), // Total USD - number
       "",
       ...Array(customColumns.length).fill(""), // Empty cells for custom columns in summary
     ]);
@@ -680,6 +716,8 @@ const ReportDetail = () => {
 
     worksheet.mergeCells(summaryRow.number, 1, summaryRow.number, 13);
 
+    setExportProgress({ current: 90, total: 100, message: "Generating file..." });
+
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -693,11 +731,56 @@ const ReportDetail = () => {
     )}${now.getFullYear()}`;
     const fileName = `${order.id || "order"}_${formattedDate}.xlsx`;
 
+    setExportProgress({ current: 100, total: 100, message: "Saving file..." });
+
     saveAs(blob, fileName);
+    
+    // Small delay to show completion before hiding progress
+    setTimeout(() => {
+      setExporting(false);
+      setExportProgress({ current: 0, total: 0, message: "" });
+    }, 500);
+    } catch (error) {
+      console.error("Error exporting Excel:", error);
+      alert("Error exporting Excel file. Please try again.");
+      setExporting(false);
+      setExportProgress({ current: 0, total: 0, message: "" });
+    }
   };
 
   return (
     <div className="space-y-4 sm:space-y-6 w-full">
+      {/* Export Progress Modal */}
+      {exporting && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+            <div className="flex flex-col items-center">
+              <div className="animate-spin rounded-full border-4 border-gray-200 border-t-primary-600 w-12 h-12 mb-4"></div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Exporting Excel...
+              </h3>
+              <p className="text-sm text-gray-600 mb-4 text-center">
+                {exportProgress.message}
+              </p>
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+                <div
+                  className="bg-primary-600 h-2.5 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${exportProgress.total > 0 ? (exportProgress.current / exportProgress.total) * 100 : 0}%`,
+                  }}
+                ></div>
+              </div>
+              <p className="text-xs text-gray-500">
+                {exportProgress.total > 0
+                  ? `${Math.round((exportProgress.current / exportProgress.total) * 100)}%`
+                  : "0%"}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header - Hide when printing */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 print:hidden">
         <div className="flex items-center space-x-4">
@@ -718,9 +801,13 @@ const ReportDetail = () => {
         </div>
 
         <div className="flex space-x-2">
-          <button onClick={handleExportExcel} className="btn-secondary">
+          <button
+            onClick={handleExportExcel}
+            disabled={exporting}
+            className={`btn-secondary ${exporting ? "opacity-50 cursor-not-allowed" : ""}`}
+          >
             <File className="w-4 h-4" />
-            Export Excel
+            {exporting ? "Exporting..." : "Export Excel"}
           </button>
           {/* <button onClick={handlePrint} className="btn-secondary">
             <Print className="w-4 h-4" />
@@ -982,7 +1069,7 @@ const ReportDetail = () => {
                     <td className="border border-gray-300 px-2 py-2 text-center">
                       {item.picture_url ? (
                         <img
-                          src={`http://api-inventory.isavralabel.com/kayu-manis-properti${item.picture_url}`}
+                          src={`https://api-inventory.isavralabel.com/kayu-manis-properti${item.picture_url}`}
                           alt={item.description}
                           className="h-12 w-12 object-cover rounded mx-auto border border-gray-200"
                         />

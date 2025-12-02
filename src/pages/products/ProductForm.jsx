@@ -75,7 +75,7 @@ const ProductForm = () => {
       });
       
       if (product.picture_url) {
-        setImagePreview(`http://api-inventory.isavralabel.com/kayu-manis-properti${product.picture_url}`);
+        setImagePreview(`https://api-inventory.isavralabel.com/kayu-manis-properti${product.picture_url}`);
       }
     } catch (error) {
       console.error('Error loading product:', error);

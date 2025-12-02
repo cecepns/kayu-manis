@@ -151,7 +151,7 @@ const ProductList = () => {
                           <div className="flex-shrink-0 h-12 w-12">
                             {product.picture_url ? (
                               <img 
-                                src={`http://api-inventory.isavralabel.com/kayu-manis-properti${product.picture_url}`}
+                                src={`https://api-inventory.isavralabel.com/kayu-manis-properti${product.picture_url}`}
                                 alt={product.description}
                                 className="h-12 w-12 object-cover rounded-lg border border-gray-200"
                               />
@@ -238,7 +238,7 @@ const ProductList = () => {
                   <div className="flex-shrink-0">
                     {product.picture_url ? (
                       <img 
-                        src={`http://api-inventory.isavralabel.com/kayu-manis-properti${product.picture_url}`}
+                        src={`https://api-inventory.isavralabel.com/kayu-manis-properti${product.picture_url}`}
                         alt={product.description}
                         className="h-16 w-16 object-cover rounded-lg border border-gray-200"
                       />

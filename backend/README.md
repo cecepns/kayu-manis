@@ -53,7 +53,7 @@ Backend API server for the Furniture Order Management System built with Express.
    npm start
    ```
 
-The server will start on `http://api-inventory.isavralabel.com/kayu-manis-properti`
+The server will start on `https://api-inventory.isavralabel.com/kayu-manis-properti`
 
 ## API Endpoints
 
