@@ -75,6 +75,51 @@ const ReportDetail = () => {
       : order.custom_columns
     : [];
 
+  // Helper to calculate total per-unit Gross W and Net W across all items
+  const calculatePerUnitWeightTotals = (itemsArray) => {
+    if (!Array.isArray(itemsArray)) {
+      return { totalGrossUnit: 0, totalNetUnit: 0 };
+    }
+
+    const safeParse = (value) => {
+      const num = parseFloat(value);
+      return isNaN(num) ? 0 : num;
+    };
+
+    return itemsArray.reduce(
+      (acc, item) => {
+        const qtyNum = safeParse(item.qty);
+
+        let grossPer = item.gross_weight;
+        let netPer = item.net_weight;
+
+        // Fallback: derive per-unit from total if per-unit not present
+        if ((grossPer === null || grossPer === undefined) && item.gross_weight_total && qtyNum > 0) {
+          grossPer = safeParse(item.gross_weight_total) / qtyNum;
+        }
+        if ((netPer === null || netPer === undefined) && item.net_weight_total && qtyNum > 0) {
+          netPer = safeParse(item.net_weight_total) / qtyNum;
+        }
+
+        const grossNum =
+          typeof grossPer === "number" ? grossPer : safeParse(grossPer);
+        const netNum =
+          typeof netPer === "number" ? netPer : safeParse(netPer);
+
+        return {
+          totalGrossUnit:
+            acc.totalGrossUnit + (isNaN(grossNum) ? 0 : grossNum),
+          totalNetUnit: acc.totalNetUnit + (isNaN(netNum) ? 0 : netNum),
+        };
+      },
+      { totalGrossUnit: 0, totalNetUnit: 0 }
+    );
+  };
+
+  const { totalGrossUnit, totalNetUnit } = calculatePerUnitWeightTotals(items);
+  const displayTotalGrossUnit = totalGrossUnit.toFixed(2);
+  const displayTotalNetUnit = totalNetUnit.toFixed(2);
+
   const handleExportExcel = async () => {
     if (!items || !Array.isArray(items)) return;
 
@@ -685,8 +730,8 @@ const ReportDetail = () => {
       "",
       "",
       toNumber(summary.totalCBM), // CBM - number
-      toNumber(summary.totalGrossWeight), // Gross Weight - number
-      toNumber(summary.totalNetWeight), // Net Weight - number
+      totalGrossUnit, // Gross W total from per-unit weights
+      totalNetUnit, // Net W total from per-unit weights
       toNumber(summary.totalGW), // Total GW - number
       toNumber(summary.totalNW), // Total NW - number
       "",
@@ -1163,10 +1208,12 @@ const ReportDetail = () => {
                     {summary.totalCBM}
                   </td>
                   <td className="border border-gray-300 px-2 py-2 text-center">
-                    {summary.totalGrossWeight || "-"}
+                    {/* Total Gross W from per-unit weights */}
+                    {displayTotalGrossUnit}
                   </td>
                   <td className="border border-gray-300 px-2 py-2 text-center">
-                    {summary.totalNetWeight || "-"}
+                    {/* Total Net W from per-unit weights */}
+                    {displayTotalNetUnit}
                   </td>
                   <td className="border border-gray-300 px-2 py-2 text-center">
                     {summary.totalGW || "-"}
