@@ -587,8 +587,9 @@ const ReportDetail = () => {
         item.color || "",
         toNumber(item.qty), // Qty - number
         toNumber(item.cbm_total), // CBM - number
-        toNumber(item.gross_weight_total), // Gross W - number
-        toNumber(item.net_weight_total), // Net W - number
+        // Use per-unit gross/net weight when available; fall back to totals if needed
+        toNumber(item.gross_weight ?? item.gross_weight_total), // Gross W - number
+        toNumber(item.net_weight ?? item.net_weight_total), // Net W - number
         toNumber(item.total_gw_total), // Total GW - number
         toNumber(item.total_nw_total), // Total NW - number
         toNumber(item.fob || item.fob_price), // FOB - number
@@ -1110,10 +1111,12 @@ const ReportDetail = () => {
                       {item.cbm_total}
                     </td>
                     <td className="border border-gray-300 px-2 py-2 text-center">
-                      {item.gross_weight_total || "-"}
+                      {/* Show per-unit Gross W; fall back to total if needed */}
+                      {item.gross_weight ?? item.gross_weight_total ?? "-"}
                     </td>
                     <td className="border border-gray-300 px-2 py-2 text-center">
-                      {item.net_weight_total || "-"}
+                      {/* Show per-unit Net W; fall back to total if needed */}
+                      {item.net_weight ?? item.net_weight_total ?? "-"}
                     </td>
                     <td className="border border-gray-300 px-2 py-2 text-center">
                       {item.total_gw_total || "-"}

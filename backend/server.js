@@ -413,7 +413,7 @@ app.get('/api/orders/:id', async (req, res) => {
       }
     }
     
-    // Parse custom_column_values for each item
+    // Parse custom_column_values for each item and derive per-unit weights
     const parsedItems = items.map(item => {
       if (item.custom_column_values && typeof item.custom_column_values === 'string') {
         try {
@@ -422,6 +422,26 @@ app.get('/api/orders/:id', async (req, res) => {
           item.custom_column_values = {};
         }
       }
+
+      // Derive per-unit gross_weight and net_weight so report & Excel
+      // always have the correct single-item weights, separate from totals.
+      const qty = parseFloat(item.qty || 0);
+      const gwTotal = parseFloat(item.gross_weight_total || 0);
+      const nwTotal = parseFloat(item.net_weight_total || 0);
+
+      if (!isNaN(qty) && qty > 0) {
+        const perUnitGW = gwTotal / qty;
+        const perUnitNW = nwTotal / qty;
+
+        // Expose as string with 2 decimals (e.g. "8.00", "7.00")
+        item.gross_weight = isNaN(perUnitGW) ? null : perUnitGW.toFixed(2);
+        item.net_weight = isNaN(perUnitNW) ? null : perUnitNW.toFixed(2);
+      } else {
+        // If qty invalid, keep them null so frontend can decide how to handle
+        item.gross_weight = null;
+        item.net_weight = null;
+      }
+
       return item;
     });
 
@@ -643,7 +663,7 @@ app.get('/api/orders/:id/report', async (req, res) => {
       ORDER BY oi.id
     `, [req.params.id]);
 
-    // Parse custom_column_values for each item
+    // Parse custom_column_values for each item and derive per-unit weights
     const parsedItems = items.map(item => {
       if (item.custom_column_values && typeof item.custom_column_values === 'string') {
         try {
@@ -652,6 +672,26 @@ app.get('/api/orders/:id/report', async (req, res) => {
           item.custom_column_values = {};
         }
       }
+
+      // Derive per-unit gross_weight and net_weight so report & Excel
+      // always have the correct single-item weights, separate from totals.
+      const qty = parseFloat(item.qty || 0);
+      const gwTotal = parseFloat(item.gross_weight_total || 0);
+      const nwTotal = parseFloat(item.net_weight_total || 0);
+
+      if (!isNaN(qty) && qty > 0) {
+        const perUnitGW = gwTotal / qty;
+        const perUnitNW = nwTotal / qty;
+
+        // Expose as string with 2 decimals (e.g. "8.00", "7.00")
+        item.gross_weight = isNaN(perUnitGW) ? null : perUnitGW.toFixed(2);
+        item.net_weight = isNaN(perUnitNW) ? null : perUnitNW.toFixed(2);
+      } else {
+        // If qty invalid, keep them null so frontend can decide how to handle
+        item.gross_weight = null;
+        item.net_weight = null;
+      }
+
       return item;
     });
 
