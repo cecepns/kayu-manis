@@ -8,10 +8,15 @@ import Layout from './components/layout/Layout';
 import Login from './pages/Login';
 import ProductList from './pages/products/ProductList';
 import ProductForm from './pages/products/ProductForm';
+import FolderList from './pages/folders/FolderList';
+import FolderForm from './pages/folders/FolderForm';
+import BuyerList from './pages/buyers/BuyerList';
+import BuyerForm from './pages/buyers/BuyerForm';
 import OrderList from './pages/orders/OrderList';
 import OrderForm from './pages/orders/OrderForm';
 import ReportList from './pages/reports/ReportList';
 import ReportDetail from './pages/reports/ReportDetail';
+import PublicProductDetail from './pages/public/PublicProductDetail';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -31,6 +36,9 @@ function App() {
           {/* Login Page */}
           <Route path="/" element={<Login />} />
           
+          {/* Public Routes */}
+          <Route path="/public/product/:id" element={<PublicProductDetail />} />
+          
           {/* Main App Routes - Protected */}
           <Route 
             path="/app" 
@@ -44,6 +52,16 @@ function App() {
             <Route path="products" element={<ProductList />} />
             <Route path="products/new" element={<ProductForm />} />
             <Route path="products/:id/edit" element={<ProductForm />} />
+            
+            {/* Folders */}
+            <Route path="folders" element={<FolderList />} />
+            <Route path="folders/new" element={<FolderForm />} />
+            <Route path="folders/:id/edit" element={<FolderForm />} />
+            
+            {/* Buyers */}
+            <Route path="buyers" element={<BuyerList />} />
+            <Route path="buyers/new" element={<BuyerForm />} />
+            <Route path="buyers/:id/edit" element={<BuyerForm />} />
             
             {/* Orders */}
             <Route path="orders" element={<OrderList />} />

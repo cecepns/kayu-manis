@@ -95,24 +95,39 @@ app.get('/api/products', async (req, res) => {
     let whereClause = '';
     let queryParams = [];
 
+    const folderId = req.query.folder_id;
+    
     if (search) {
-      whereClause = 'WHERE km_code LIKE ? OR description LIKE ?';
+      whereClause = 'WHERE (p.km_code LIKE ? OR p.description LIKE ?)';
       queryParams = [`%${search}%`, `%${search}%`];
+    }
+    
+    if (folderId) {
+      if (whereClause) {
+        whereClause += ' AND p.folder_id = ?';
+        queryParams.push(folderId);
+      } else {
+        whereClause = 'WHERE p.folder_id = ?';
+        queryParams = [folderId];
+      }
     }
 
     // Get total count
-    const countQuery = `SELECT COUNT(*) as total FROM products ${whereClause}`;
+    const countQuery = `SELECT COUNT(*) as total FROM products p ${whereClause}`;
     const [countResult] = await db.execute(countQuery, queryParams);
     const totalItems = countResult[0].total;
     const totalPages = Math.ceil(totalItems / limit);
 
-    // Get products
+    // Get products with folder information
     const productsQuery = `
-      SELECT * FROM products 
+      SELECT p.*, f.name as folder_name, f.color as folder_color 
+      FROM products p
+      LEFT JOIN product_folders f ON p.folder_id = f.id
       ${whereClause}
-      ORDER BY created_at DESC 
+      ORDER BY p.created_at DESC 
       LIMIT ? OFFSET ?
     `;
+    // Note: p.* includes all columns including client_code, client_barcode, and description (now nullable)
     const [products] = await db.execute(productsQuery, [...queryParams, limit, offset]);
 
     res.json({
@@ -130,7 +145,7 @@ app.get('/api/products', async (req, res) => {
 app.get('/api/products/select', async (req, res) => {
   try {
     const [products] = await db.execute(
-      'SELECT id, client_code, km_code, description, cbm, fob_price, gross_weight, net_weight, total_gw, total_nw, picture_url, size_width, size_depth, size_height, packing_width, packing_depth, packing_height, color FROM products ORDER BY km_code'
+      'SELECT p.id, p.client_code, p.client_barcode, p.km_code, p.description, p.cbm, p.fob_price, p.gross_weight, p.net_weight, p.total_gw, p.total_nw, p.picture_url, p.size_width, p.size_depth, p.size_height, p.packing_width, p.packing_depth, p.packing_height, p.color, p.folder_id, f.name as folder_name FROM products p LEFT JOIN product_folders f ON p.folder_id = f.id ORDER BY p.km_code'
     );
 
     res.json({ products });
@@ -143,7 +158,7 @@ app.get('/api/products/select', async (req, res) => {
 app.get('/api/products/:id', async (req, res) => {
   try {
     const [products] = await db.execute(
-      'SELECT * FROM products WHERE id = ?',
+      'SELECT p.*, f.name as folder_name, f.color as folder_color FROM products p LEFT JOIN product_folders f ON p.folder_id = f.id WHERE p.id = ?',
       [req.params.id]
     );
 
@@ -161,7 +176,7 @@ app.get('/api/products/:id', async (req, res) => {
 app.post('/api/products', upload.single('picture'), async (req, res) => {
   try {
     const {
-      client_code, km_code, description, size_width, size_depth, size_height,
+      client_code, client_barcode, km_code, description, folder_id, size_width, size_depth, size_height,
       packing_width, packing_depth, packing_height, cbm, color,
       gross_weight, net_weight, total_gw, total_nw, fob_price, total_price, hs_code
     } = req.body;
@@ -193,12 +208,12 @@ app.post('/api/products', upload.single('picture'), async (req, res) => {
 
     const [result] = await db.execute(`
       INSERT INTO products (
-        client_code, km_code, description, picture_url, size_width, size_depth, size_height,
+        client_code, client_barcode, km_code, description, folder_id, picture_url, size_width, size_depth, size_height,
         packing_width, packing_depth, packing_height, cbm, color,
         gross_weight, net_weight, total_gw, total_nw, fob_price, total_price, hs_code
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      client_code || null, km_code, description, picture_url, size_width, size_depth, size_height,
+      client_code || null, client_barcode || null, km_code, description || null, folder_id || null, picture_url, size_width, size_depth, size_height,
       packing_width, packing_depth, packing_height, calculatedCBM || cbm, color,
       gross_weight, net_weight, calculatedTotalGW || total_gw, calculatedTotalNW || total_nw || null, 
       fob_price, calculatedTotalPrice || total_price, hs_code
@@ -217,7 +232,7 @@ app.post('/api/products', upload.single('picture'), async (req, res) => {
 app.put('/api/products/:id', upload.single('picture'), async (req, res) => {
   try {
     const {
-      client_code, km_code, description, size_width, size_depth, size_height,
+      client_code, client_barcode, km_code, description, folder_id, size_width, size_depth, size_height,
       packing_width, packing_depth, packing_height, cbm, color,
       gross_weight, net_weight, total_gw, total_nw, fob_price, total_price, hs_code
     } = req.body;
@@ -267,7 +282,7 @@ app.put('/api/products/:id', upload.single('picture'), async (req, res) => {
 
     await db.execute(`
       UPDATE products SET 
-        client_code = ?, km_code = ?, description = ?, picture_url = ?, 
+        client_code = ?, client_barcode = ?, km_code = ?, description = ?, folder_id = ?, picture_url = ?, 
         size_width = ?, size_depth = ?, size_height = ?,
         packing_width = ?, packing_depth = ?, packing_height = ?, 
         cbm = ?, color = ?, gross_weight = ?, net_weight = ?, total_gw = ?, total_nw = ?,
@@ -275,7 +290,7 @@ app.put('/api/products/:id', upload.single('picture'), async (req, res) => {
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, [
-      client_code || null, km_code, description, picture_url, size_width, size_depth, size_height,
+      client_code || null, client_barcode || null, km_code, description || null, folder_id || null, picture_url, size_width, size_depth, size_height,
       packing_width, packing_depth, packing_height, calculatedCBM || cbm, color,
       gross_weight, net_weight, calculatedTotalGW || total_gw, calculatedTotalNW || total_nw || null, 
       fob_price, calculatedTotalPrice || total_price, hs_code,
@@ -327,6 +342,128 @@ app.delete('/api/products/:id', async (req, res) => {
     res.json({ message: 'Product deleted successfully' });
   } catch (error) {
     handleDbError(error, res, 'delete product');
+  }
+});
+
+// Product Folders API Routes
+// Get all folders
+app.get('/api/folders', async (req, res) => {
+  try {
+    const [folders] = await db.execute(
+      'SELECT f.*, COUNT(p.id) as product_count FROM product_folders f LEFT JOIN products p ON f.id = p.folder_id GROUP BY f.id ORDER BY f.name'
+    );
+    res.json({ folders });
+  } catch (error) {
+    handleDbError(error, res, 'fetch folders');
+  }
+});
+
+// Get folder by ID
+app.get('/api/folders/:id', async (req, res) => {
+  try {
+    const [folders] = await db.execute(
+      'SELECT * FROM product_folders WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (folders.length === 0) {
+      return res.status(404).json({ error: 'Folder not found' });
+    }
+
+    res.json(folders[0]);
+  } catch (error) {
+    handleDbError(error, res, 'fetch folder');
+  }
+});
+
+// Create folder
+app.post('/api/folders', async (req, res) => {
+  try {
+    const { name, description, color } = req.body;
+
+    if (!name || name.trim() === '') {
+      return res.status(400).json({ error: 'Folder name is required' });
+    }
+
+    const [result] = await db.execute(
+      'INSERT INTO product_folders (name, description, color) VALUES (?, ?, ?)',
+      [name.trim(), description || null, color || null]
+    );
+
+    res.status(201).json({ 
+      id: result.insertId, 
+      message: 'Folder created successfully' 
+    });
+  } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({ error: 'Folder with this name already exists' });
+    }
+    handleDbError(error, res, 'create folder');
+  }
+});
+
+// Update folder
+app.put('/api/folders/:id', async (req, res) => {
+  try {
+    const { name, description, color } = req.body;
+
+    if (!name || name.trim() === '') {
+      return res.status(400).json({ error: 'Folder name is required' });
+    }
+
+    // Check if folder exists
+    const [existingFolders] = await db.execute(
+      'SELECT id FROM product_folders WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (existingFolders.length === 0) {
+      return res.status(404).json({ error: 'Folder not found' });
+    }
+
+    await db.execute(
+      'UPDATE product_folders SET name = ?, description = ?, color = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [name.trim(), description || null, color || null, req.params.id]
+    );
+
+    res.json({ message: 'Folder updated successfully' });
+  } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({ error: 'Folder with this name already exists' });
+    }
+    handleDbError(error, res, 'update folder');
+  }
+});
+
+// Delete folder
+app.delete('/api/folders/:id', async (req, res) => {
+  try {
+    // Check if folder exists
+    const [folders] = await db.execute(
+      'SELECT id FROM product_folders WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (folders.length === 0) {
+      return res.status(404).json({ error: 'Folder not found' });
+    }
+
+    // Check if folder is used by any products
+    const [products] = await db.execute(
+      'SELECT COUNT(*) as count FROM products WHERE folder_id = ?',
+      [req.params.id]
+    );
+
+    if (products[0].count > 0) {
+      return res.status(400).json({ 
+        error: 'Cannot delete folder because it contains products. Please move or remove products first.' 
+      });
+    }
+
+    await db.execute('DELETE FROM product_folders WHERE id = ?', [req.params.id]);
+    res.json({ message: 'Folder deleted successfully' });
+  } catch (error) {
+    handleDbError(error, res, 'delete folder');
   }
 });
 
@@ -471,12 +608,13 @@ app.post('/api/orders', async (req, res) => {
       port_loading,
       destination_port,
       custom_columns,
+      template_type,
       items
     } = req.body;
 
     // Insert order
     const [orderResult] = await connection.execute(
-      'INSERT INTO orders (no_pi, buyer_name, buyer_address, currency, invoice_date, volume, port_loading, destination_port, custom_columns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO orders (no_pi, buyer_name, buyer_address, currency, invoice_date, volume, port_loading, destination_port, custom_columns, template_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         no_pi,
         buyer_name,
@@ -486,7 +624,8 @@ app.post('/api/orders', async (req, res) => {
         volume || null,
         port_loading || null,
         destination_port || null,
-        custom_columns ? JSON.stringify(custom_columns) : null
+        custom_columns ? JSON.stringify(custom_columns) : null,
+        template_type || 'normal'
       ]
     );
 
@@ -498,8 +637,8 @@ app.post('/api/orders', async (req, res) => {
         INSERT INTO order_items (
           order_id, product_id, client_code, qty, cbm_total, fob_total_usd,
           gross_weight_total, net_weight_total, total_gw_total, total_nw_total,
-          fob, custom_column_values
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          fob, custom_column_values, discount_5, discount_10
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         orderId,
         nullIfUndefined(item.product_id),
@@ -512,7 +651,9 @@ app.post('/api/orders', async (req, res) => {
         nullIfUndefined(item.total_gw_total),
         nullIfUndefined(item.total_nw_total),
         nullIfUndefined(item.fob),
-        item.custom_column_values ? JSON.stringify(item.custom_column_values) : null
+        item.custom_column_values ? JSON.stringify(item.custom_column_values) : null,
+        nullIfUndefined(item.discount_5),
+        nullIfUndefined(item.discount_10)
       ]);
     }
 
@@ -546,12 +687,13 @@ app.put('/api/orders/:id', async (req, res) => {
       port_loading,
       destination_port,
       custom_columns,
+      template_type,
       items
     } = req.body;
 
     // Update order
     await connection.execute(
-      'UPDATE orders SET no_pi = ?, buyer_name = ?, buyer_address = ?, currency = ?, invoice_date = ?, volume = ?, port_loading = ?, destination_port = ?, custom_columns = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      'UPDATE orders SET no_pi = ?, buyer_name = ?, buyer_address = ?, currency = ?, invoice_date = ?, volume = ?, port_loading = ?, destination_port = ?, custom_columns = ?, template_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
       [
         no_pi,
         buyer_name,
@@ -562,6 +704,7 @@ app.put('/api/orders/:id', async (req, res) => {
         port_loading || null,
         destination_port || null,
         custom_columns ? JSON.stringify(custom_columns) : null,
+        template_type || 'normal',
         req.params.id
       ]
     );
@@ -575,8 +718,8 @@ app.put('/api/orders/:id', async (req, res) => {
         INSERT INTO order_items (
           order_id, product_id, client_code, qty, cbm_total, fob_total_usd,
           gross_weight_total, net_weight_total, total_gw_total, total_nw_total,
-          fob, custom_column_values
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          fob, custom_column_values, discount_5, discount_10
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         req.params.id,
         nullIfUndefined(item.product_id),
@@ -589,7 +732,9 @@ app.put('/api/orders/:id', async (req, res) => {
         nullIfUndefined(item.total_gw_total),
         nullIfUndefined(item.total_nw_total),
         nullIfUndefined(item.fob),
-        item.custom_column_values ? JSON.stringify(item.custom_column_values) : null
+        item.custom_column_values ? JSON.stringify(item.custom_column_values) : null,
+        nullIfUndefined(item.discount_5),
+        nullIfUndefined(item.discount_10)
       ]);
     }
 
@@ -656,6 +801,7 @@ app.get('/api/orders/:id/report', async (req, res) => {
         oi.*,
         p.km_code, p.description, p.picture_url, p.size_width, p.size_depth, p.size_height,
         p.packing_width, p.packing_depth, p.packing_height, p.color, p.fob_price, p.hs_code,
+        p.client_barcode,
         COALESCE(oi.fob, p.fob_price) as fob
       FROM order_items oi
       INNER JOIN products p ON oi.product_id = p.id
@@ -738,6 +884,179 @@ app.get('/api/orders/:id/report', async (req, res) => {
     handleDbError(error, res, 'fetch order report');
   }
 });
+
+// Buyers API Routes
+// Get buyers with pagination and search
+app.get('/api/buyers', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+    const offset = (page - 1) * limit;
+
+    let whereClause = '';
+    let queryParams = [];
+
+    if (search) {
+      whereClause = 'WHERE name LIKE ? OR address LIKE ?';
+      queryParams = [`%${search}%`, `%${search}%`];
+    }
+
+    // Get total count
+    const countQuery = `SELECT COUNT(*) as total FROM buyers ${whereClause}`;
+    const [countResult] = await db.execute(countQuery, queryParams);
+    const totalItems = countResult[0].total;
+    const totalPages = Math.ceil(totalItems / limit);
+
+    // Get buyers
+    const buyersQuery = `
+      SELECT * FROM buyers 
+      ${whereClause}
+      ORDER BY name ASC 
+      LIMIT ? OFFSET ?
+    `;
+    const [buyers] = await db.execute(buyersQuery, [...queryParams, limit, offset]);
+
+    res.json({
+      buyers,
+      totalItems,
+      totalPages,
+      currentPage: page
+    });
+  } catch (error) {
+    handleDbError(error, res, 'fetch buyers');
+  }
+});
+
+// Get buyers for select dropdown with search (for react-select)
+app.get('/api/buyers/select', async (req, res) => {
+  try {
+    const search = req.query.search || '';
+    
+    let whereClause = '';
+    let queryParams = [];
+
+    if (search) {
+      whereClause = 'WHERE name LIKE ? OR address LIKE ?';
+      queryParams = [`%${search}%`, `%${search}%`];
+    }
+
+    const [buyers] = await db.execute(
+      `SELECT id, name, address FROM buyers ${whereClause} ORDER BY name ASC LIMIT 50`,
+      queryParams
+    );
+
+    res.json({ buyers });
+  } catch (error) {
+    handleDbError(error, res, 'fetch buyers for select');
+  }
+});
+
+// Get buyer by ID
+app.get('/api/buyers/:id', async (req, res) => {
+  try {
+    const [buyers] = await db.execute(
+      'SELECT * FROM buyers WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (buyers.length === 0) {
+      return res.status(404).json({ error: 'Buyer not found' });
+    }
+
+    res.json(buyers[0]);
+  } catch (error) {
+    handleDbError(error, res, 'fetch buyer');
+  }
+});
+
+// Create buyer
+app.post('/api/buyers', async (req, res) => {
+  try {
+    const { name, address } = req.body;
+
+    if (!name || !address) {
+      return res.status(400).json({ error: 'Name and address are required' });
+    }
+
+    const [result] = await db.execute(
+      'INSERT INTO buyers (name, address) VALUES (?, ?)',
+      [name, address]
+    );
+
+    res.status(201).json({ 
+      id: result.insertId, 
+      message: 'Buyer created successfully' 
+    });
+  } catch (error) {
+    handleDbError(error, res, 'create buyer');
+  }
+});
+
+// Update buyer
+app.put('/api/buyers/:id', async (req, res) => {
+  try {
+    const { name, address } = req.body;
+
+    if (!name || !address) {
+      return res.status(400).json({ error: 'Name and address are required' });
+    }
+
+    // Check if buyer exists
+    const [buyers] = await db.execute(
+      'SELECT id FROM buyers WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (buyers.length === 0) {
+      return res.status(404).json({ error: 'Buyer not found' });
+    }
+
+    await db.execute(
+      'UPDATE buyers SET name = ?, address = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [name, address, req.params.id]
+    );
+
+    res.json({ message: 'Buyer updated successfully' });
+  } catch (error) {
+    handleDbError(error, res, 'update buyer');
+  }
+});
+
+// Delete buyer
+app.delete('/api/buyers/:id', async (req, res) => {
+  try {
+    // Check if buyer is used in any orders
+    const [usageRows] = await db.execute(
+      'SELECT COUNT(*) AS usage_count FROM orders WHERE buyer_id = ?',
+      [req.params.id]
+    );
+
+    const usageCount = usageRows[0]?.usage_count || 0;
+
+    if (usageCount > 0) {
+      return res.status(400).json({
+        error: 'Cannot delete buyer because it is used in existing orders. Please remove it from orders first.'
+      });
+    }
+
+    // Check if buyer exists
+    const [buyers] = await db.execute(
+      'SELECT id FROM buyers WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (buyers.length === 0) {
+      return res.status(404).json({ error: 'Buyer not found' });
+    }
+
+    await db.execute('DELETE FROM buyers WHERE id = ?', [req.params.id]);
+    res.json({ message: 'Buyer deleted successfully' });
+  } catch (error) {
+    handleDbError(error, res, 'delete buyer');
+  }
+});
+
 
 // Error handling middleware
 app.use((error, req, res, next) => {

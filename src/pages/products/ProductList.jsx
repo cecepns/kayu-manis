@@ -1,25 +1,38 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, PencilIcon, Trash2, Package } from 'lucide-react';
+import { Plus, PencilIcon, Trash2, Package, Folder, Download, QrCode } from 'lucide-react';
+import QRCode from 'qrcode';
 import { productsAPI } from '../../utils/apiProducts';
+import { foldersAPI } from '../../utils/apiFolders';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import Pagination from '../../components/common/Pagination';
 import SearchBar from '../../components/common/SearchBar';
 
 const ProductList = () => {
   const [products, setProducts] = useState([]);
+  const [folders, setFolders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedFolderId, setSelectedFolderId] = useState('');
   const itemsPerPage = 10;
   const previousSearchTermRef = useRef(searchTerm);
+
+  const loadFolders = useCallback(async () => {
+    try {
+      const response = await foldersAPI.getFolders();
+      setFolders(response.folders || []);
+    } catch (error) {
+      console.error('Error loading folders:', error);
+    }
+  }, []);
 
   const loadProducts = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await productsAPI.getProducts(currentPage, itemsPerPage, searchTerm);
+      const response = await productsAPI.getProducts(currentPage, itemsPerPage, searchTerm, selectedFolderId);
       setProducts(response.products);
       setTotalPages(response.totalPages);
       setTotalItems(response.totalItems);
@@ -28,7 +41,11 @@ const ProductList = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, searchTerm, itemsPerPage]);
+  }, [currentPage, searchTerm, itemsPerPage, selectedFolderId]);
+
+  useEffect(() => {
+    loadFolders();
+  }, [loadFolders]);
 
   useEffect(() => {
     loadProducts();
@@ -74,6 +91,35 @@ const ProductList = () => {
     // If search term didn't change, do nothing (avoid unnecessary re-renders and page resets)
   }, []);
 
+  const handleDownloadQRCode = async (productId) => {
+    try {
+      // Get base URL (frontend URL)
+      const baseUrl = window.location.origin;
+      const publicUrl = `${baseUrl}/public/product/${productId}`;
+      
+      // Generate QR code as data URL
+      const qrDataUrl = await QRCode.toDataURL(publicUrl, {
+        width: 256,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      });
+      
+      // Create download link
+      const a = document.createElement('a');
+      a.href = qrDataUrl;
+      a.download = `qrcode-product-${productId}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Error downloading QR code:', error);
+      alert('Error downloading QR code');
+    }
+  };
+
   if (loading) {
     return <LoadingSpinner text="Loading products..." />;
   }
@@ -102,6 +148,21 @@ const ProductList = () => {
             placeholder="Search products by KM Code, description..."
             className="flex-1"
           />
+          <select
+            value={selectedFolderId}
+            onChange={(e) => {
+              setSelectedFolderId(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="input-field sm:w-48"
+          >
+            <option value="">All Folders</option>
+            {folders.map((folder) => (
+              <option key={folder.id} value={folder.id}>
+                {folder.name} ({folder.product_count || 0})
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -138,6 +199,9 @@ const ProductList = () => {
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       FOB Price
                     </th>
+                    <th className="px-4 lg:px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      QR Code
+                    </th>
                     <th className="px-4 lg:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
@@ -162,8 +226,22 @@ const ProductList = () => {
                             )}
                           </div>
                           <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">
-                              {product.km_code}
+                            <div className="flex items-center gap-2">
+                              <div className="text-sm font-medium text-gray-900">
+                                {product.km_code}
+                              </div>
+                              {product.folder_name && (
+                                <span 
+                                  className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                                  style={{
+                                    backgroundColor: product.folder_color ? `${product.folder_color}20` : '#E5E7EB',
+                                    color: product.folder_color || '#6B7280'
+                                  }}
+                                >
+                                  <Folder className="w-3 h-3 mr-1" />
+                                  {product.folder_name}
+                                </span>
+                              )}
                             </div>
                             <div className="text-sm text-gray-500 line-clamp-2">
                               {product.description}
@@ -184,6 +262,16 @@ const ProductList = () => {
                       </td>
                       <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {product.fob_price}
+                      </td>
+                      <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-center">
+                        <button
+                          onClick={() => handleDownloadQRCode(product.id)}
+                          className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors"
+                          title="Download QR Code"
+                        >
+                          <Download className="w-4 h-4 mr-1" />
+                          QR Code
+                        </button>
                       </td>
                       <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
                         <Link 
@@ -251,14 +339,35 @@ const ProductList = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between">
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-semibold text-gray-900 truncate">
-                          {product.km_code}
-                        </h3>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-sm font-semibold text-gray-900 truncate">
+                            {product.km_code}
+                          </h3>
+                          {product.folder_name && (
+                            <span 
+                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                              style={{
+                                backgroundColor: product.folder_color ? `${product.folder_color}20` : '#E5E7EB',
+                                color: product.folder_color || '#6B7280'
+                              }}
+                            >
+                              <Folder className="w-3 h-3 mr-1" />
+                              {product.folder_name}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-500 mt-1 line-clamp-2">
                           {product.description}
                         </p>
                       </div>
                       <div className="flex items-center space-x-2 ml-2">
+                        <button
+                          onClick={() => handleDownloadQRCode(product.id)}
+                          className="text-primary-600 hover:text-primary-900 p-1"
+                          title="Download QR Code"
+                        >
+                          <QrCode className="w-4 h-4" />
+                        </button>
                         <Link 
                           to={`/app/products/${product.id}/edit`}
                           className="text-primary-600 hover:text-primary-900 p-1"

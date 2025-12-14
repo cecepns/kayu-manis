@@ -69,6 +69,7 @@ const ReportDetail = () => {
 
   const { order, items, summary } = reportData;
   const displayCurrency = order?.currency || summary?.currency || "USD";
+  const isSpecialTemplate = order?.template_type === 'special';
   const customColumns = order?.custom_columns
     ? typeof order.custom_columns === "string"
       ? JSON.parse(order.custom_columns)
@@ -330,9 +331,12 @@ const ReportDetail = () => {
         : order.custom_columns
       : [];
 
+    const isSpecialTemplate = order.template_type === 'special';
+    
     const headerRow1 = [
       "No",
       "Client Code",
+      ...(isSpecialTemplate ? ["Client Barcode"] : []),
       "KM Code",
       "Picture",
       "Description",
@@ -350,6 +354,7 @@ const ReportDetail = () => {
       "",
       "",
       "FOB",
+      ...(isSpecialTemplate ? ["Discount 5%", "Discount 10%"] : []),
       "Total",
       "HS Code",
       ...customColumns, // Add custom columns
@@ -358,6 +363,7 @@ const ReportDetail = () => {
     const headerRow2 = [
       "",
       "",
+      ...(isSpecialTemplate ? [""] : []),
       "",
       "",
       "",
@@ -375,6 +381,7 @@ const ReportDetail = () => {
       "Total GW",
       "Total NW",
       displayCurrency,
+      ...(isSpecialTemplate ? [displayCurrency, displayCurrency] : []),
       displayCurrency,
       "",
       ...Array(customColumns.length).fill(""), // Add empty cells for custom columns
@@ -386,25 +393,36 @@ const ReportDetail = () => {
     const headerRow2Index = excelHeaderRow2.number;
 
     // Merges to mirror the on-screen table
+    let colOffset = 0;
     worksheet.mergeCells(headerRow1Index, 1, headerRow2Index, 1); // No
     worksheet.mergeCells(headerRow1Index, 2, headerRow2Index, 2); // Client Code
-    worksheet.mergeCells(headerRow1Index, 3, headerRow2Index, 3); // KM Code
-    worksheet.mergeCells(headerRow1Index, 4, headerRow2Index, 4); // Picture
-    worksheet.mergeCells(headerRow1Index, 5, headerRow2Index, 5); // Description
-    worksheet.mergeCells(headerRow1Index, 12, headerRow2Index, 12); // Color
-    worksheet.mergeCells(headerRow1Index, 13, headerRow2Index, 13); // Qty
-    worksheet.mergeCells(headerRow1Index, 14, headerRow2Index, 14); // CBM
-    worksheet.mergeCells(headerRow1Index, 19, headerRow2Index, 19); // FOB
-    worksheet.mergeCells(headerRow1Index, 20, headerRow2Index, 20); // Total
-    worksheet.mergeCells(headerRow1Index, 21, headerRow2Index, 21); // HS Code
+    colOffset = isSpecialTemplate ? 1 : 0;
+    if (isSpecialTemplate) {
+      worksheet.mergeCells(headerRow1Index, 3, headerRow2Index, 3); // Client Barcode
+    }
+    worksheet.mergeCells(headerRow1Index, 3 + colOffset, headerRow2Index, 3 + colOffset); // KM Code
+    worksheet.mergeCells(headerRow1Index, 4 + colOffset, headerRow2Index, 4 + colOffset); // Picture
+    worksheet.mergeCells(headerRow1Index, 5 + colOffset, headerRow2Index, 5 + colOffset); // Description
+    worksheet.mergeCells(headerRow1Index, 12 + colOffset, headerRow2Index, 12 + colOffset); // Color
+    worksheet.mergeCells(headerRow1Index, 13 + colOffset, headerRow2Index, 13 + colOffset); // Qty
+    worksheet.mergeCells(headerRow1Index, 14 + colOffset, headerRow2Index, 14 + colOffset); // CBM
+    worksheet.mergeCells(headerRow1Index, 19 + colOffset, headerRow2Index, 19 + colOffset); // FOB
+    if (isSpecialTemplate) {
+      worksheet.mergeCells(headerRow1Index, 20 + colOffset, headerRow2Index, 20 + colOffset); // Discount 5%
+      worksheet.mergeCells(headerRow1Index, 21 + colOffset, headerRow2Index, 21 + colOffset); // Discount 10%
+      colOffset += 2;
+    }
+    worksheet.mergeCells(headerRow1Index, 20 + colOffset, headerRow2Index, 20 + colOffset); // Total
+    worksheet.mergeCells(headerRow1Index, 21 + colOffset, headerRow2Index, 21 + colOffset); // HS Code
 
-    worksheet.mergeCells(headerRow1Index, 6, headerRow1Index, 8); // Size (cm)
-    worksheet.mergeCells(headerRow1Index, 9, headerRow1Index, 11); // Packing Size (cm)
-    worksheet.mergeCells(headerRow1Index, 15, headerRow1Index, 18); // Weight (kgs)
+    worksheet.mergeCells(headerRow1Index, 6 + (isSpecialTemplate ? 1 : 0), headerRow1Index, 8 + (isSpecialTemplate ? 1 : 0)); // Size (cm)
+    worksheet.mergeCells(headerRow1Index, 9 + (isSpecialTemplate ? 1 : 0), headerRow1Index, 11 + (isSpecialTemplate ? 1 : 0)); // Packing Size (cm)
+    worksheet.mergeCells(headerRow1Index, 15 + (isSpecialTemplate ? 1 : 0), headerRow1Index, 18 + (isSpecialTemplate ? 1 : 0)); // Weight (kgs)
 
     // Merge custom columns (each custom column spans both header rows)
+    const customColStartIndex = 21 + (isSpecialTemplate ? 3 : 1); // Start after HS Code (and discounts if special template)
     customColumns.forEach((_, index) => {
-      const colIndex = 22 + index; // Start after HS Code (column 21)
+      const colIndex = customColStartIndex + index;
       worksheet.mergeCells(
         headerRow1Index,
         colIndex,
@@ -448,6 +466,7 @@ const ReportDetail = () => {
     const columnWidths = [
       5, // No
       12, // Client Code
+      ...(isSpecialTemplate ? [15] : []), // Client Barcode
       18, // KM Code (increased width)
       18, // Picture
       30, // Description
@@ -465,6 +484,7 @@ const ReportDetail = () => {
       10, // Total GW
       10, // Total NW
       12, // FOB
+      ...(isSpecialTemplate ? [12, 12] : []), // Discount 5%, Discount 10%
       14, // Total
       18, // HS Code (increased width)
       ...Array(customColumns.length).fill(15), // Custom columns width
@@ -595,7 +615,7 @@ const ReportDetail = () => {
 
     // Data rows with images
     const baseUrlForImages = "https://api-inventory.isavralabel.com/kayu-manis-properti";
-    const pictureColumnIndex = 4; // "Picture" column
+    const pictureColumnIndex = 4 + (isSpecialTemplate ? 1 : 0); // "Picture" column (adjust for Client Barcode if special template)
 
     setExportProgress({ current: 30, total: 100, message: "Processing items..." });
 
@@ -620,6 +640,7 @@ const ReportDetail = () => {
       const row = worksheet.addRow([
         index + 1, // No - already number
         item.client_code || "-",
+        ...(isSpecialTemplate ? [item.client_barcode || "-"] : []),
         item.km_code || "",
         "", // picture handled separately
         item.description || "",
@@ -638,6 +659,10 @@ const ReportDetail = () => {
         toNumber(item.total_gw_total), // Total GW - number
         toNumber(item.total_nw_total), // Total NW - number
         toNumber(item.fob || item.fob_price), // FOB - number
+        ...(isSpecialTemplate ? [
+          toNumber(item.discount_5), // Discount 5% - number
+          toNumber(item.discount_10), // Discount 10% - number
+        ] : []),
         toNumber(item.fob_total_usd || item.fob_total), // Total - number
         item.hs_code || "",
         ...customColumns.map((col) => {
@@ -718,6 +743,8 @@ const ReportDetail = () => {
     const summaryRow = worksheet.addRow([
       "TOTAL",
       "",
+      ...(isSpecialTemplate ? [""] : []),
+      "",
       "",
       "",
       "",
@@ -735,6 +762,7 @@ const ReportDetail = () => {
       toNumber(summary.totalGW), // Total GW - number
       toNumber(summary.totalNW), // Total NW - number
       "",
+      ...(isSpecialTemplate ? ["", ""] : []), // Empty cells for discounts in summary
       toNumber(summary.totalUSD), // Total USD - number
       "",
       ...Array(customColumns.length).fill(""), // Empty cells for custom columns in summary
@@ -760,7 +788,7 @@ const ReportDetail = () => {
       }
     });
 
-    worksheet.mergeCells(summaryRow.number, 1, summaryRow.number, 13);
+    worksheet.mergeCells(summaryRow.number, 1, summaryRow.number, 13 + (isSpecialTemplate ? 1 : 0));
 
     setExportProgress({ current: 90, total: 100, message: "Generating file..." });
 
@@ -985,6 +1013,14 @@ const ReportDetail = () => {
                   >
                     Client Code
                   </th>
+                  {isSpecialTemplate && (
+                    <th
+                      className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs"
+                      rowSpan="2"
+                    >
+                      Client Barcode
+                    </th>
+                  )}
                   <th
                     className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs"
                     rowSpan="2"
@@ -1095,6 +1131,16 @@ const ReportDetail = () => {
                   <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
                     {displayCurrency}
                   </th>
+                  {isSpecialTemplate && (
+                    <>
+                      <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
+                        Discount 5%
+                      </th>
+                      <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
+                        Discount 10%
+                      </th>
+                    </>
+                  )}
                   <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
                     {displayCurrency}
                   </th>
@@ -1109,6 +1155,11 @@ const ReportDetail = () => {
                     <td className="border border-gray-300 px-2 py-2 text-center">
                       {item.client_code || "-"}
                     </td>
+                    {isSpecialTemplate && (
+                      <td className="border border-gray-300 px-2 py-2 text-center">
+                        {item.client_barcode || "-"}
+                      </td>
+                    )}
                     <td className="border border-gray-300 px-2 py-2 text-center font-medium">
                       {item.km_code}
                     </td>
@@ -1172,6 +1223,16 @@ const ReportDetail = () => {
                     <td className="border border-gray-300 px-2 py-2 text-center">
                       <div>{item.fob || item.fob_price || "-"}</div>
                     </td>
+                    {isSpecialTemplate && (
+                      <>
+                        <td className="border border-gray-300 px-2 py-2 text-center">
+                          {item.discount_5 ? formatCurrency(item.discount_5, displayCurrency) : "-"}
+                        </td>
+                        <td className="border border-gray-300 px-2 py-2 text-center">
+                          {item.discount_10 ? formatCurrency(item.discount_10, displayCurrency) : "-"}
+                        </td>
+                      </>
+                    )}
                     <td className="border border-gray-300 px-2 py-2 text-center font-medium">
                       <div>{item.fob_total_usd || item.fob_total || "-"}</div>
                     </td>
@@ -1200,7 +1261,7 @@ const ReportDetail = () => {
                 <tr className="bg-yellow-100 font-semibold">
                   <td
                     className="border border-gray-300 px-2 py-2 text-center"
-                    colSpan="13"
+                    colSpan={isSpecialTemplate ? "14" : "13"}
                   >
                     TOTAL
                   </td>
@@ -1224,6 +1285,16 @@ const ReportDetail = () => {
                   <td className="border border-gray-300 px-2 py-2 text-center">
                     <div>-</div>
                   </td>
+                  {isSpecialTemplate && (
+                    <>
+                      <td className="border border-gray-300 px-2 py-2 text-center">
+                        <div>-</div>
+                      </td>
+                      <td className="border border-gray-300 px-2 py-2 text-center">
+                        <div>-</div>
+                      </td>
+                    </>
+                  )}
                   <td className="border border-gray-300 px-2 py-2 text-center text-green-600">
                     <div>{summary.totalUSD}</div>
                   </td>

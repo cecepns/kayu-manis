@@ -12,9 +12,13 @@ const api = axios.create({
 // Products API
 export const productsAPI = {
   // Get all products with pagination and search
-  getProducts: async (page = 1, limit = 10, search = '') => {
+  getProducts: async (page = 1, limit = 10, search = '', folderId = '') => {
     try {
-      const response = await api.get(`/products?page=${page}&limit=${limit}&search=${search}`);
+      let url = `/products?page=${page}&limit=${limit}&search=${search}`;
+      if (folderId) {
+        url += `&folder_id=${folderId}`;
+      }
+      const response = await api.get(url);
       return response.data;
     } catch (error) {
       throw error.response?.data || error.message;

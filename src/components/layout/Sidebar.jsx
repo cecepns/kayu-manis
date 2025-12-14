@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Package, ShoppingCart, FileText, X } from "lucide-react";
+import { Package, ShoppingCart, FileText, Users, Folder, X } from "lucide-react";
 import PropTypes from "prop-types";
 import Logo from "../../assets/logo.jpeg";
 
@@ -8,10 +8,22 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   const menuItems = [
     {
+      path: "/app/folders",
+      icon: Folder,
+      label: "Folders",
+      description: "Organize products",
+    },
+    {
       path: "/app/products",
       icon: Package,
       label: "Products",
       description: "Manage furniture catalog",
+    },
+    {
+      path: "/app/buyers",
+      icon: Users,
+      label: "Buyers",
+      description: "Manage buyer information",
     },
     {
       path: "/app/orders",

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Upload, X } from 'lucide-react';
 import Select from 'react-select';
 import { productsAPI } from '../../utils/apiProducts';
+import { foldersAPI } from '../../utils/apiFolders';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 
 const ProductForm = () => {
@@ -13,11 +14,14 @@ const ProductForm = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
+  const [folders, setFolders] = useState([]);
 
   const [formData, setFormData] = useState({
     client_code: '',
+    client_barcode: '',
     km_code: '',
     description: '',
+    folder_id: '',
     picture: null,
     size_width: '',
     size_depth: '',
@@ -54,8 +58,10 @@ const ProductForm = () => {
 
       setFormData({
         client_code: product.client_code || '',
+        client_barcode: product.client_barcode || '',
         km_code: product.km_code || '',
         description: product.description || '',
+        folder_id: product.folder_id || '',
         picture: null,
         size_width: product.size_width || '',
         size_depth: product.size_depth || '',
@@ -84,6 +90,19 @@ const ProductForm = () => {
       setLoading(false);
     }
   }, [id]);
+
+  const loadFolders = useCallback(async () => {
+    try {
+      const response = await foldersAPI.getFolders();
+      setFolders(response.folders || []);
+    } catch (error) {
+      console.error('Error loading folders:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFolders();
+  }, [loadFolders]);
 
   useEffect(() => {
     if (isEdit) {
@@ -200,8 +219,10 @@ const ProductForm = () => {
       title: 'Basic Information',
       fields: [
         { label: 'Client Code', name: 'client_code', type: 'text', required: false },
+        { label: 'Client Barcode', name: 'client_barcode', type: 'text', required: false },
         { label: 'KM Code', name: 'km_code', type: 'text', required: true },
-        { label: 'Description', name: 'description', type: 'textarea', required: true },
+        { label: 'Description', name: 'description', type: 'textarea', required: false },
+        { label: 'Folder', name: 'folder_id', type: 'select', options: folders.map(f => ({ value: f.id.toString(), label: f.name })), required: false },
       ]
     },
     {
@@ -375,7 +396,8 @@ const ProductForm = () => {
                           required={field.required}
                           className="input-field"
                         >
-                          {field.options.map((option) =>
+                          <option value="">None</option>
+                          {field.options && field.options.map((option) =>
                             typeof option === 'string' ? (
                               <option key={option} value={option}>
                                 {option}
