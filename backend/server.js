@@ -145,7 +145,7 @@ app.get('/api/products', async (req, res) => {
 app.get('/api/products/select', async (req, res) => {
   try {
     const [products] = await db.execute(
-      'SELECT p.id, p.client_code, p.client_barcode, p.km_code, p.description, p.cbm, p.fob_price, p.gross_weight, p.net_weight, p.total_gw, p.total_nw, p.picture_url, p.size_width, p.size_depth, p.size_height, p.packing_width, p.packing_depth, p.packing_height, p.color, p.folder_id, f.name as folder_name FROM products p LEFT JOIN product_folders f ON p.folder_id = f.id ORDER BY p.km_code'
+      'SELECT p.id, p.client_code, p.client_barcode, p.client_description, p.km_code, p.description, p.cbm, p.fob_price, p.gross_weight, p.net_weight, p.total_gw, p.total_nw, p.picture_url, p.size_width, p.size_depth, p.size_height, p.packing_width, p.packing_depth, p.packing_height, p.color, p.folder_id, f.name as folder_name FROM products p LEFT JOIN product_folders f ON p.folder_id = f.id ORDER BY p.km_code'
     );
 
     res.json({ products });
@@ -176,7 +176,7 @@ app.get('/api/products/:id', async (req, res) => {
 app.post('/api/products', upload.single('picture'), async (req, res) => {
   try {
     const {
-      client_code, client_barcode, km_code, description, folder_id, size_width, size_depth, size_height,
+      client_code, client_barcode, client_description, km_code, description, folder_id, size_width, size_depth, size_height,
       packing_width, packing_depth, packing_height, cbm, color,
       gross_weight, net_weight, total_gw, total_nw, fob_price, total_price, hs_code
     } = req.body;
@@ -208,12 +208,12 @@ app.post('/api/products', upload.single('picture'), async (req, res) => {
 
     const [result] = await db.execute(`
       INSERT INTO products (
-        client_code, client_barcode, km_code, description, folder_id, picture_url, size_width, size_depth, size_height,
+        client_code, client_barcode, client_description, km_code, description, folder_id, picture_url, size_width, size_depth, size_height,
         packing_width, packing_depth, packing_height, cbm, color,
         gross_weight, net_weight, total_gw, total_nw, fob_price, total_price, hs_code
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      client_code || null, client_barcode || null, km_code, description || null, folder_id || null, picture_url, size_width, size_depth, size_height,
+      client_code || null, client_barcode || null, client_description || null, km_code, description || null, folder_id || null, picture_url, size_width, size_depth, size_height,
       packing_width, packing_depth, packing_height, calculatedCBM || cbm, color,
       gross_weight, net_weight, calculatedTotalGW || total_gw, calculatedTotalNW || total_nw || null, 
       fob_price, calculatedTotalPrice || total_price, hs_code
@@ -232,7 +232,7 @@ app.post('/api/products', upload.single('picture'), async (req, res) => {
 app.put('/api/products/:id', upload.single('picture'), async (req, res) => {
   try {
     const {
-      client_code, client_barcode, km_code, description, folder_id, size_width, size_depth, size_height,
+      client_code, client_barcode, client_description, km_code, description, folder_id, size_width, size_depth, size_height,
       packing_width, packing_depth, packing_height, cbm, color,
       gross_weight, net_weight, total_gw, total_nw, fob_price, total_price, hs_code
     } = req.body;
@@ -282,7 +282,7 @@ app.put('/api/products/:id', upload.single('picture'), async (req, res) => {
 
     await db.execute(`
       UPDATE products SET 
-        client_code = ?, client_barcode = ?, km_code = ?, description = ?, folder_id = ?, picture_url = ?, 
+        client_code = ?, client_barcode = ?, client_description = ?, km_code = ?, description = ?, folder_id = ?, picture_url = ?, 
         size_width = ?, size_depth = ?, size_height = ?,
         packing_width = ?, packing_depth = ?, packing_height = ?, 
         cbm = ?, color = ?, gross_weight = ?, net_weight = ?, total_gw = ?, total_nw = ?,
@@ -290,7 +290,7 @@ app.put('/api/products/:id', upload.single('picture'), async (req, res) => {
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, [
-      client_code || null, client_barcode || null, km_code, description || null, folder_id || null, picture_url, size_width, size_depth, size_height,
+      client_code || null, client_barcode || null, client_description || null, km_code, description || null, folder_id || null, picture_url, size_width, size_depth, size_height,
       packing_width, packing_depth, packing_height, calculatedCBM || cbm, color,
       gross_weight, net_weight, calculatedTotalGW || total_gw, calculatedTotalNW || total_nw || null, 
       fob_price, calculatedTotalPrice || total_price, hs_code,
@@ -801,7 +801,7 @@ app.get('/api/orders/:id/report', async (req, res) => {
         oi.*,
         p.km_code, p.description, p.picture_url, p.size_width, p.size_depth, p.size_height,
         p.packing_width, p.packing_depth, p.packing_height, p.color, p.fob_price, p.hs_code,
-        p.client_barcode,
+        p.client_barcode, p.client_description,
         COALESCE(oi.fob, p.fob_price) as fob
       FROM order_items oi
       INNER JOIN products p ON oi.product_id = p.id

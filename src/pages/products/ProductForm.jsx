@@ -19,6 +19,7 @@ const ProductForm = () => {
   const [formData, setFormData] = useState({
     client_code: '',
     client_barcode: '',
+    client_description: '',
     km_code: '',
     description: '',
     folder_id: '',
@@ -59,6 +60,7 @@ const ProductForm = () => {
       setFormData({
         client_code: product.client_code || '',
         client_barcode: product.client_barcode || '',
+        client_description: product.client_description || '',
         km_code: product.km_code || '',
         description: product.description || '',
         folder_id: product.folder_id || '',
@@ -220,6 +222,7 @@ const ProductForm = () => {
       fields: [
         { label: 'Client Code', name: 'client_code', type: 'text', required: false },
         { label: 'Client Barcode', name: 'client_barcode', type: 'text', required: false },
+        { label: 'Client Description', name: 'client_description', type: 'textarea', required: false },
         { label: 'KM Code', name: 'km_code', type: 'text', required: true },
         { label: 'Description', name: 'description', type: 'textarea', required: false },
         { label: 'Folder', name: 'folder_id', type: 'select', options: folders.map(f => ({ value: f.id.toString(), label: f.name })), required: false },

@@ -336,7 +336,7 @@ const ReportDetail = () => {
     const headerRow1 = [
       "No",
       "Client Code",
-      ...(isSpecialTemplate ? ["Client Barcode"] : []),
+      ...(isSpecialTemplate ? ["Client Barcode", "Client Description"] : []),
       "KM Code",
       "Picture",
       "Description",
@@ -363,7 +363,7 @@ const ReportDetail = () => {
     const headerRow2 = [
       "",
       "",
-      ...(isSpecialTemplate ? [""] : []),
+      ...(isSpecialTemplate ? ["", ""] : []),
       "",
       "",
       "",
@@ -396,9 +396,10 @@ const ReportDetail = () => {
     let colOffset = 0;
     worksheet.mergeCells(headerRow1Index, 1, headerRow2Index, 1); // No
     worksheet.mergeCells(headerRow1Index, 2, headerRow2Index, 2); // Client Code
-    colOffset = isSpecialTemplate ? 1 : 0;
+    colOffset = isSpecialTemplate ? 2 : 0;
     if (isSpecialTemplate) {
       worksheet.mergeCells(headerRow1Index, 3, headerRow2Index, 3); // Client Barcode
+      worksheet.mergeCells(headerRow1Index, 4, headerRow2Index, 4); // Client Description
     }
     worksheet.mergeCells(headerRow1Index, 3 + colOffset, headerRow2Index, 3 + colOffset); // KM Code
     worksheet.mergeCells(headerRow1Index, 4 + colOffset, headerRow2Index, 4 + colOffset); // Picture
@@ -415,12 +416,12 @@ const ReportDetail = () => {
     worksheet.mergeCells(headerRow1Index, 20 + colOffset, headerRow2Index, 20 + colOffset); // Total
     worksheet.mergeCells(headerRow1Index, 21 + colOffset, headerRow2Index, 21 + colOffset); // HS Code
 
-    worksheet.mergeCells(headerRow1Index, 6 + (isSpecialTemplate ? 1 : 0), headerRow1Index, 8 + (isSpecialTemplate ? 1 : 0)); // Size (cm)
-    worksheet.mergeCells(headerRow1Index, 9 + (isSpecialTemplate ? 1 : 0), headerRow1Index, 11 + (isSpecialTemplate ? 1 : 0)); // Packing Size (cm)
-    worksheet.mergeCells(headerRow1Index, 15 + (isSpecialTemplate ? 1 : 0), headerRow1Index, 18 + (isSpecialTemplate ? 1 : 0)); // Weight (kgs)
+    worksheet.mergeCells(headerRow1Index, 6 + (isSpecialTemplate ? 2 : 0), headerRow1Index, 8 + (isSpecialTemplate ? 2 : 0)); // Size (cm)
+    worksheet.mergeCells(headerRow1Index, 9 + (isSpecialTemplate ? 2 : 0), headerRow1Index, 11 + (isSpecialTemplate ? 2 : 0)); // Packing Size (cm)
+    worksheet.mergeCells(headerRow1Index, 15 + (isSpecialTemplate ? 2 : 0), headerRow1Index, 18 + (isSpecialTemplate ? 2 : 0)); // Weight (kgs)
 
     // Merge custom columns (each custom column spans both header rows)
-    const customColStartIndex = 21 + (isSpecialTemplate ? 3 : 1); // Start after HS Code (and discounts if special template)
+    const customColStartIndex = 21 + (isSpecialTemplate ? 4 : 1); // Start after HS Code (and discounts + client_description if special template)
     customColumns.forEach((_, index) => {
       const colIndex = customColStartIndex + index;
       worksheet.mergeCells(
@@ -466,7 +467,7 @@ const ReportDetail = () => {
     const columnWidths = [
       5, // No
       12, // Client Code
-      ...(isSpecialTemplate ? [15] : []), // Client Barcode
+      ...(isSpecialTemplate ? [15, 30] : []), // Client Barcode, Client Description
       18, // KM Code (increased width)
       18, // Picture
       30, // Description
@@ -615,7 +616,7 @@ const ReportDetail = () => {
 
     // Data rows with images
     const baseUrlForImages = "https://api-inventory.isavralabel.com/kayu-manis-properti";
-    const pictureColumnIndex = 4 + (isSpecialTemplate ? 1 : 0); // "Picture" column (adjust for Client Barcode if special template)
+    const pictureColumnIndex = 4 + (isSpecialTemplate ? 2 : 0); // "Picture" column (adjust for Client Barcode + Client Description if special template)
 
     setExportProgress({ current: 30, total: 100, message: "Processing items..." });
 
@@ -640,7 +641,7 @@ const ReportDetail = () => {
       const row = worksheet.addRow([
         index + 1, // No - already number
         item.client_code || "-",
-        ...(isSpecialTemplate ? [item.client_barcode || "-"] : []),
+        ...(isSpecialTemplate ? [item.client_barcode || "-", item.client_description || "-"] : []),
         item.km_code || "",
         "", // picture handled separately
         item.description || "",
@@ -743,7 +744,7 @@ const ReportDetail = () => {
     const summaryRow = worksheet.addRow([
       "TOTAL",
       "",
-      ...(isSpecialTemplate ? [""] : []),
+      ...(isSpecialTemplate ? ["", ""] : []),
       "",
       "",
       "",
@@ -788,7 +789,7 @@ const ReportDetail = () => {
       }
     });
 
-    worksheet.mergeCells(summaryRow.number, 1, summaryRow.number, 13 + (isSpecialTemplate ? 1 : 0));
+    worksheet.mergeCells(summaryRow.number, 1, summaryRow.number, 13 + (isSpecialTemplate ? 2 : 0));
 
     setExportProgress({ current: 90, total: 100, message: "Generating file..." });
 
@@ -1014,12 +1015,20 @@ const ReportDetail = () => {
                     Client Code
                   </th>
                   {isSpecialTemplate && (
-                    <th
-                      className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs"
-                      rowSpan="2"
-                    >
-                      Client Barcode
-                    </th>
+                    <>
+                      <th
+                        className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs"
+                        rowSpan="2"
+                      >
+                        Client Barcode
+                      </th>
+                      <th
+                        className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs"
+                        rowSpan="2"
+                      >
+                        Client Description
+                      </th>
+                    </>
                   )}
                   <th
                     className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs"
@@ -1156,9 +1165,14 @@ const ReportDetail = () => {
                       {item.client_code || "-"}
                     </td>
                     {isSpecialTemplate && (
-                      <td className="border border-gray-300 px-2 py-2 text-center">
-                        {item.client_barcode || "-"}
-                      </td>
+                      <>
+                        <td className="border border-gray-300 px-2 py-2 text-center">
+                          {item.client_barcode || "-"}
+                        </td>
+                        <td className="border border-gray-300 px-2 py-2 text-left">
+                          {item.client_description || "-"}
+                        </td>
+                      </>
                     )}
                     <td className="border border-gray-300 px-2 py-2 text-center font-medium">
                       {item.km_code}
@@ -1261,7 +1275,7 @@ const ReportDetail = () => {
                 <tr className="bg-yellow-100 font-semibold">
                   <td
                     className="border border-gray-300 px-2 py-2 text-center"
-                    colSpan={isSpecialTemplate ? "14" : "13"}
+                    colSpan={isSpecialTemplate ? "15" : "13"}
                   >
                     TOTAL
                   </td>

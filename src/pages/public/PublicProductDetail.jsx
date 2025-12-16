@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Package } from 'lucide-react';
+import { Package, ChevronDown, ChevronRight } from 'lucide-react';
 import { productsAPI } from '../../utils/apiProducts';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 
@@ -9,6 +9,7 @@ const PublicProductDetail = () => {
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showPrice, setShowPrice] = useState(false);
 
   useEffect(() => {
     const loadProduct = async () => {
@@ -112,6 +113,31 @@ const PublicProductDetail = () => {
                   <span className="text-lg">
                     Dimensions: {product.size_width} × {product.size_depth} × {product.size_height} cm
                   </span>
+                </div>
+              )}
+            </div>
+
+            {/* Hidden Price Toggle */}
+            <div className="border-t border-gray-200 pt-6 mt-6">
+              <button
+                onClick={() => setShowPrice(!showPrice)}
+                className="flex items-center gap-2 text-gray-400 hover:text-gray-600 transition-colors duration-200 focus:outline-none group"
+              >
+                {showPrice ? (
+                  <ChevronDown className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                ) : (
+                  <ChevronRight className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                )}
+                <span className="text-sm">···</span>
+              </button>
+              
+              {showPrice && product.price && (
+                <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-lg p-6 border border-amber-200">
+                    <div className="text-4xl font-bold text-gray-900">
+                      Rp {product.price.toLocaleString('id-ID')}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
