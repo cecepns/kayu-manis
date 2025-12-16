@@ -612,10 +612,35 @@ app.post('/api/orders', async (req, res) => {
       items
     } = req.body;
 
-    // Insert order
+    // Find or create buyer to get buyer_id
+    let buyerId;
+    const [existingBuyers] = await connection.execute(
+      'SELECT id FROM buyers WHERE name = ?',
+      [buyer_name]
+    );
+
+    if (existingBuyers.length > 0) {
+      buyerId = existingBuyers[0].id;
+      
+      // Update buyer address if it changed
+      await connection.execute(
+        'UPDATE buyers SET address = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [buyer_address, buyerId]
+      );
+    } else {
+      // Create new buyer
+      const [buyerResult] = await connection.execute(
+        'INSERT INTO buyers (name, address) VALUES (?, ?)',
+        [buyer_name, buyer_address]
+      );
+      buyerId = buyerResult.insertId;
+    }
+
+    // Insert order with buyer_id
     const [orderResult] = await connection.execute(
-      'INSERT INTO orders (no_pi, buyer_name, buyer_address, currency, invoice_date, volume, port_loading, destination_port, custom_columns, template_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO orders (buyer_id, no_pi, buyer_name, buyer_address, currency, invoice_date, volume, port_loading, destination_port, custom_columns, template_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
+        buyerId,
         no_pi,
         buyer_name,
         buyer_address,
@@ -691,10 +716,35 @@ app.put('/api/orders/:id', async (req, res) => {
       items
     } = req.body;
 
-    // Update order
+    // Find or create buyer to get buyer_id
+    let buyerId;
+    const [existingBuyers] = await connection.execute(
+      'SELECT id FROM buyers WHERE name = ?',
+      [buyer_name]
+    );
+
+    if (existingBuyers.length > 0) {
+      buyerId = existingBuyers[0].id;
+      
+      // Update buyer address if it changed
+      await connection.execute(
+        'UPDATE buyers SET address = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [buyer_address, buyerId]
+      );
+    } else {
+      // Create new buyer
+      const [buyerResult] = await connection.execute(
+        'INSERT INTO buyers (name, address) VALUES (?, ?)',
+        [buyer_name, buyer_address]
+      );
+      buyerId = buyerResult.insertId;
+    }
+
+    // Update order with buyer_id
     await connection.execute(
-      'UPDATE orders SET no_pi = ?, buyer_name = ?, buyer_address = ?, currency = ?, invoice_date = ?, volume = ?, port_loading = ?, destination_port = ?, custom_columns = ?, template_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      'UPDATE orders SET buyer_id = ?, no_pi = ?, buyer_name = ?, buyer_address = ?, currency = ?, invoice_date = ?, volume = ?, port_loading = ?, destination_port = ?, custom_columns = ?, template_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
       [
+        buyerId,
         no_pi,
         buyer_name,
         buyer_address,

@@ -407,13 +407,11 @@ const ReportDetail = () => {
     worksheet.mergeCells(headerRow1Index, 12 + colOffset, headerRow2Index, 12 + colOffset); // Color
     worksheet.mergeCells(headerRow1Index, 13 + colOffset, headerRow2Index, 13 + colOffset); // Qty
     worksheet.mergeCells(headerRow1Index, 14 + colOffset, headerRow2Index, 14 + colOffset); // CBM
-    worksheet.mergeCells(headerRow1Index, 19 + colOffset, headerRow2Index, 19 + colOffset); // FOB
+    // FOB, Discount 5%, Discount 10%, and Total are NOT merged - they show currency in row 2
+    // Only HS Code is merged vertically
     if (isSpecialTemplate) {
-      worksheet.mergeCells(headerRow1Index, 20 + colOffset, headerRow2Index, 20 + colOffset); // Discount 5%
-      worksheet.mergeCells(headerRow1Index, 21 + colOffset, headerRow2Index, 21 + colOffset); // Discount 10%
-      colOffset += 2;
+      colOffset += 2; // Account for discount columns
     }
-    worksheet.mergeCells(headerRow1Index, 20 + colOffset, headerRow2Index, 20 + colOffset); // Total
     worksheet.mergeCells(headerRow1Index, 21 + colOffset, headerRow2Index, 21 + colOffset); // HS Code
 
     worksheet.mergeCells(headerRow1Index, 6 + (isSpecialTemplate ? 2 : 0), headerRow1Index, 8 + (isSpecialTemplate ? 2 : 0)); // Size (cm)
@@ -421,7 +419,9 @@ const ReportDetail = () => {
     worksheet.mergeCells(headerRow1Index, 15 + (isSpecialTemplate ? 2 : 0), headerRow1Index, 18 + (isSpecialTemplate ? 2 : 0)); // Weight (kgs)
 
     // Merge custom columns (each custom column spans both header rows)
-    const customColStartIndex = 21 + (isSpecialTemplate ? 4 : 1); // Start after HS Code (and discounts + client_description if special template)
+    // At this point, colOffset is 4 for special template and 0 for regular template
+    // HS Code is at column 21 + colOffset, so custom columns start at 22 + colOffset
+    const customColStartIndex = 22 + colOffset; // Start after HS Code
     customColumns.forEach((_, index) => {
       const colIndex = customColStartIndex + index;
       worksheet.mergeCells(
@@ -1087,6 +1087,16 @@ const ReportDetail = () => {
                   <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
                     FOB
                   </th>
+                  {isSpecialTemplate && (
+                    <>
+                      <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
+                        Discount 5%
+                      </th>
+                      <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
+                        Discount 10%
+                      </th>
+                    </>
+                  )}
                   <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
                     Total
                   </th>
@@ -1143,10 +1153,10 @@ const ReportDetail = () => {
                   {isSpecialTemplate && (
                     <>
                       <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
-                        Discount 5%
+                        {displayCurrency}
                       </th>
                       <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
-                        Discount 10%
+                        {displayCurrency}
                       </th>
                     </>
                   )}
