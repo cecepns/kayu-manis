@@ -8,3 +8,4 @@ USE furniture_order_management;
 ALTER TABLE products
   ADD COLUMN client_description TEXT NULL COMMENT 'Client-specific description for special template orders' AFTER client_barcode;
 
+

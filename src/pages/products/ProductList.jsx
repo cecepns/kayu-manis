@@ -19,6 +19,7 @@ const ProductList = () => {
   const [selectedFolderId, setSelectedFolderId] = useState('');
   const itemsPerPage = 10;
   const previousSearchTermRef = useRef(searchTerm);
+  const searchTimeoutRef = useRef(null);
 
   const loadFolders = useCallback(async () => {
     try {
@@ -51,6 +52,15 @@ const ProductList = () => {
     loadProducts();
   }, [loadProducts]);
 
+  // Cleanup timeout on component unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this product?')) {
       try {
@@ -78,17 +88,25 @@ const ProductList = () => {
   };
 
   const handleSearch = useCallback((search) => {
-    // Only update if search term actually changed
-    const trimmedSearch = search.trim();
-    const trimmedPrevious = (previousSearchTermRef.current || '').trim();
-    
-    if (trimmedSearch !== trimmedPrevious) {
-      previousSearchTermRef.current = search;
-      setSearchTerm(search);
-      // Only reset to page 1 if search term actually changed
-      setCurrentPage(1);
+    // Clear previous timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
     }
-    // If search term didn't change, do nothing (avoid unnecessary re-renders and page resets)
+    
+    // Set new timeout for debounce (1 second)
+    searchTimeoutRef.current = setTimeout(() => {
+      // Only update if search term actually changed
+      const trimmedSearch = search.trim();
+      const trimmedPrevious = (previousSearchTermRef.current || '').trim();
+      
+      if (trimmedSearch !== trimmedPrevious) {
+        previousSearchTermRef.current = search;
+        setSearchTerm(search);
+        // Only reset to page 1 if search term actually changed
+        setCurrentPage(1);
+      }
+      // If search term didn't change, do nothing (avoid unnecessary re-renders and page resets)
+    }, 1000);
   }, []);
 
   const handleDownloadQRCode = async (productId) => {
