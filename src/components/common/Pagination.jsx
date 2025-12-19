@@ -44,7 +44,7 @@ const Pagination = ({
   if (totalPages <= 1) return null;
 
   return (
-    <div className="flex items-center justify-between bg-white px-4 py-3 border-t border-gray-200">
+    <div className="flex items-center justify-between bg-white px-6 py-3 border-t border-gray-200">
       <div className="flex flex-1 justify-between sm:hidden">
         <button
           onClick={() => onPageChange(currentPage - 1)}

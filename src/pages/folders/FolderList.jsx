@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, PencilIcon, Trash2, Folder } from 'lucide-react';
 import { foldersAPI } from '../../utils/apiFolders';
@@ -9,6 +9,7 @@ const FolderList = () => {
   const [folders, setFolders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const previousSearchTermRef = useRef(searchTerm);
 
   const loadFolders = useCallback(async () => {
     try {
@@ -61,12 +62,16 @@ const FolderList = () => {
   };
 
   const handleSearch = useCallback((search) => {
-    setSearchTerm(search);
+    // Only update if search term actually changed
+    const trimmedSearch = search.trim();
+    const trimmedPrevious = (previousSearchTermRef.current || '').trim();
+    
+    if (trimmedSearch !== trimmedPrevious) {
+      previousSearchTermRef.current = search;
+      setSearchTerm(search);
+    }
+    // If search term didn't change, do nothing (avoid unnecessary re-renders)
   }, []);
-
-  if (loading) {
-    return <LoadingSpinner text="Loading folders..." />;
-  }
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -87,7 +92,6 @@ const FolderList = () => {
       <div className="card">
         <SearchBar 
           onSearch={handleSearch}
-          value={searchTerm}
           placeholder="Search folders by name or description..."
           className="flex-1"
         />
@@ -95,7 +99,11 @@ const FolderList = () => {
 
       {/* Folders Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {folders.length === 0 ? (
+        {loading ? (
+          <div className="col-span-full card py-12">
+            <LoadingSpinner text="Loading folders..." />
+          </div>
+        ) : folders.length === 0 ? (
           <div className="col-span-full card text-center py-12">
             <Folder className="mx-auto h-12 w-12 text-gray-400 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No folders found</h3>

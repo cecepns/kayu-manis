@@ -16,11 +16,7 @@ const OrderList = () => {
   const itemsPerPage = 10;
   const previousSearchTermRef = useRef(searchTerm);
 
-  useEffect(() => {
-    loadOrders();
-  }, [currentPage, searchTerm]);
-
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     try {
       setLoading(true);
       const response = await ordersAPI.getOrders(currentPage, itemsPerPage, searchTerm);
@@ -32,7 +28,11 @@ const OrderList = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, searchTerm, itemsPerPage]);
+
+  useEffect(() => {
+    loadOrders();
+  }, [loadOrders]);
 
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this order?')) {
@@ -60,10 +60,6 @@ const OrderList = () => {
     // If search term didn't change, do nothing (avoid unnecessary re-renders and page resets)
   }, []);
 
-  if (loading) {
-    return <LoadingSpinner text="Loading orders..." />;
-  }
-
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
@@ -84,7 +80,6 @@ const OrderList = () => {
         <div className="flex flex-col sm:flex-row gap-4">
           <SearchBar 
             onSearch={handleSearch}
-            value={searchTerm}
             placeholder="Search orders by PI number, buyer name..."
             className="flex-1"
           />
@@ -93,7 +88,11 @@ const OrderList = () => {
 
       {/* Orders Table - Desktop View */}
       <div className="hidden md:block card p-0 overflow-hidden">
-        {orders.length === 0 ? (
+        {loading ? (
+          <div className="py-12">
+            <LoadingSpinner text="Loading orders..." />
+          </div>
+        ) : orders.length === 0 ? (
           <div className="text-center py-12">
             <ShoppingCart className="mx-auto h-12 w-12 text-gray-400 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No orders found</h3>
@@ -206,7 +205,11 @@ const OrderList = () => {
 
       {/* Orders Cards - Mobile View */}
       <div className="md:hidden space-y-4">
-        {orders.length === 0 ? (
+        {loading ? (
+          <div className="card py-12">
+            <LoadingSpinner text="Loading orders..." />
+          </div>
+        ) : orders.length === 0 ? (
           <div className="card text-center py-12">
             <ShoppingCart className="mx-auto h-12 w-12 text-gray-400 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No orders found</h3>

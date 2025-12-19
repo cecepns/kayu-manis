@@ -1,67 +1,49 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, X } from 'lucide-react';
 
-const SearchBar = ({ onSearch, placeholder = 'Search...', className = '', value: controlledValue }) => {
-  const [internalSearchTerm, setInternalSearchTerm] = useState(controlledValue || '');
-  const isControlled = controlledValue !== undefined;
-  const searchTerm = isControlled ? controlledValue : internalSearchTerm;
+const SearchBar = ({ onSearch, placeholder = 'Search...', className = '' }) => {
+  const [searchTerm, setSearchTerm] = useState('');
   const debounceTimerRef = useRef(null);
+  const isFirstRender = useRef(true);
+  const onSearchRef = useRef(onSearch);
 
-  // Sync internal state with controlled value (only for display, NEVER trigger onSearch)
-  // For controlled components, we NEVER call onSearch from useEffect - only from user actions
+  // Keep the onSearch callback reference up to date
   useEffect(() => {
-    if (isControlled && controlledValue !== internalSearchTerm) {
-      setInternalSearchTerm(controlledValue);
+    onSearchRef.current = onSearch;
+  }, [onSearch]);
+
+  // Debounce search - call onSearch after user stops typing
+  useEffect(() => {
+    // Skip the first render to avoid calling onSearch on mount
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
     }
-  }, [controlledValue, isControlled, internalSearchTerm]);
 
-  // For uncontrolled component only: debounce and call onSearch when internal state changes
-  useEffect(() => {
-    if (!isControlled) {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    
+    debounceTimerRef.current = setTimeout(() => {
+      onSearchRef.current(searchTerm);
+    }, 1000);
+
+    return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
-      
-      debounceTimerRef.current = setTimeout(() => {
-        onSearch(internalSearchTerm);
-      }, 500);
-
-      return () => {
-        if (debounceTimerRef.current) {
-          clearTimeout(debounceTimerRef.current);
-        }
-      };
-    }
-    // For controlled components, we do NOT call onSearch here - only from user actions (handleChange/handleClear)
-  }, [internalSearchTerm, isControlled, onSearch]);
+    };
+  }, [searchTerm]);
 
   const handleChange = (e) => {
-    const newValue = e.target.value;
-    
-    if (!isControlled) {
-      setInternalSearchTerm(newValue);
-    } else {
-      // For controlled components: debounce onSearch when user types
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-      
-      debounceTimerRef.current = setTimeout(() => {
-        onSearch(newValue);
-      }, 500);
-    }
+    setSearchTerm(e.target.value);
   };
 
   const handleClear = () => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
-    
-    if (isControlled) {
-      onSearch('');
-    } else {
-      setInternalSearchTerm('');
-    }
+    setSearchTerm('');
   };
 
   return (

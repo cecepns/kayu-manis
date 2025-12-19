@@ -74,10 +74,6 @@ const BuyerList = () => {
     // If search term didn't change, do nothing (avoid unnecessary re-renders and page resets)
   }, []);
 
-  if (loading) {
-    return <LoadingSpinner text="Loading buyers..." />;
-  }
-
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
@@ -98,7 +94,6 @@ const BuyerList = () => {
         <div className="flex flex-col sm:flex-row gap-4">
           <SearchBar 
             onSearch={handleSearch}
-            value={searchTerm}
             placeholder="Search buyers by name, address..."
             className="flex-1"
           />
@@ -107,7 +102,11 @@ const BuyerList = () => {
 
       {/* Buyers Table - Desktop View */}
       <div className="hidden md:block card p-0 overflow-hidden">
-        {buyers.length === 0 ? (
+        {loading ? (
+          <div className="py-12">
+            <LoadingSpinner text="Loading buyers..." />
+          </div>
+        ) : buyers.length === 0 ? (
           <div className="text-center py-12">
             <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No buyers found</h3>
@@ -188,7 +187,11 @@ const BuyerList = () => {
 
       {/* Buyers Cards - Mobile View */}
       <div className="md:hidden space-y-4">
-        {buyers.length === 0 ? (
+        {loading ? (
+          <div className="card py-12">
+            <LoadingSpinner text="Loading buyers..." />
+          </div>
+        ) : buyers.length === 0 ? (
           <div className="card text-center py-12">
             <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No buyers found</h3>

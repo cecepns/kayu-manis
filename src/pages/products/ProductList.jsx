@@ -11,7 +11,8 @@ import SearchBar from '../../components/common/SearchBar';
 const ProductList = () => {
   const [products, setProducts] = useState([]);
   const [folders, setFolders] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
@@ -19,7 +20,7 @@ const ProductList = () => {
   const [selectedFolderId, setSelectedFolderId] = useState('');
   const itemsPerPage = 10;
   const previousSearchTermRef = useRef(searchTerm);
-  const searchTimeoutRef = useRef(null);
+  const isFirstLoad = useRef(true);
 
   const loadFolders = useCallback(async () => {
     try {
@@ -32,7 +33,11 @@ const ProductList = () => {
 
   const loadProducts = useCallback(async () => {
     try {
-      setLoading(true);
+      if (isFirstLoad.current) {
+        setInitialLoading(true);
+      } else {
+        setLoading(true);
+      }
       const response = await productsAPI.getProducts(currentPage, itemsPerPage, searchTerm, selectedFolderId);
       setProducts(response.products);
       setTotalPages(response.totalPages);
@@ -40,7 +45,12 @@ const ProductList = () => {
     } catch (error) {
       console.error('Error loading products:', error);
     } finally {
-      setLoading(false);
+      if (isFirstLoad.current) {
+        setInitialLoading(false);
+        isFirstLoad.current = false;
+      } else {
+        setLoading(false);
+      }
     }
   }, [currentPage, searchTerm, itemsPerPage, selectedFolderId]);
 
@@ -51,15 +61,6 @@ const ProductList = () => {
   useEffect(() => {
     loadProducts();
   }, [loadProducts]);
-
-  // Cleanup timeout on component unmount
-  useEffect(() => {
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-    };
-  }, []);
 
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this product?')) {
@@ -88,25 +89,15 @@ const ProductList = () => {
   };
 
   const handleSearch = useCallback((search) => {
-    // Clear previous timeout
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
+    // Only update if search term actually changed
+    const trimmedSearch = search.trim();
+    const trimmedPrevious = (previousSearchTermRef.current || '').trim();
     
-    // Set new timeout for debounce (1 second)
-    searchTimeoutRef.current = setTimeout(() => {
-      // Only update if search term actually changed
-      const trimmedSearch = search.trim();
-      const trimmedPrevious = (previousSearchTermRef.current || '').trim();
-      
-      if (trimmedSearch !== trimmedPrevious) {
-        previousSearchTermRef.current = search;
-        setSearchTerm(search);
-        // Only reset to page 1 if search term actually changed
-        setCurrentPage(1);
-      }
-      // If search term didn't change, do nothing (avoid unnecessary re-renders and page resets)
-    }, 1000);
+    if (trimmedSearch !== trimmedPrevious) {
+      previousSearchTermRef.current = search;
+      setSearchTerm(search);
+      setCurrentPage(1);
+    }
   }, []);
 
   const handleDownloadQRCode = async (productId) => {
@@ -138,12 +129,12 @@ const ProductList = () => {
     }
   };
 
-  if (loading) {
+  if (initialLoading) {
     return <LoadingSpinner text="Loading products..." />;
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-6 relative">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
         <div>
@@ -162,7 +153,6 @@ const ProductList = () => {
         <div className="flex flex-col sm:flex-row gap-4">
           <SearchBar 
             onSearch={handleSearch}
-            value={searchTerm}
             placeholder="Search products by KM Code, description..."
             className="flex-1"
           />
@@ -184,8 +174,17 @@ const ProductList = () => {
         </div>
       </div>
 
+      {/* Loading Overlay */}
+      {loading && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 shadow-xl">
+            <LoadingSpinner text="Searching products..." />
+          </div>
+        </div>
+      )}
+
       {/* Products Table - Desktop View */}
-      <div className="hidden md:block card p-0 overflow-hidden">
+      <div className="hidden md:block card overflow-hidden">
         {products.length === 0 ? (
           <div className="text-center py-12">
             <Package className="mx-auto h-12 w-12 text-gray-400 mb-4" />
@@ -198,7 +197,7 @@ const ProductList = () => {
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto -mx-6">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="table-header">
                   <tr>
