@@ -124,18 +124,18 @@ const PublicProductDetail = () => {
                 className="flex items-center gap-2 text-gray-400 hover:text-gray-600 transition-colors duration-200 focus:outline-none group"
               >
                 {showPrice ? (
-                  <ChevronDown className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                  <ChevronDown className="w-5 h-5 group-hover:scale-110 transition-transform text-white" />
                 ) : (
-                  <ChevronRight className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                  <ChevronRight className="w-5 h-5 group-hover:scale-110 transition-transform text-white" />
                 )}
-                <span className="text-sm">···</span>
+                {/* <span className="text-sm">···</span> */}
               </button>
               
-              {showPrice && product.price && (
+              {showPrice && product.fob_price && (
                 <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-lg p-6 border border-amber-200">
-                    <div className="text-4xl font-bold text-gray-900">
-                      Rp {product.price.toLocaleString('id-ID')}
+                    <div className="text-md font-bold text-gray-900">
+                      $ {product.fob_price.toLocaleString('en-US')}
                     </div>
                   </div>
                 </div>
