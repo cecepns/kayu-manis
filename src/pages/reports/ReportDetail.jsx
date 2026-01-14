@@ -121,6 +121,12 @@ const ReportDetail = () => {
   const displayTotalGrossUnit = totalGrossUnit.toFixed(2);
   const displayTotalNetUnit = totalNetUnit.toFixed(2);
 
+  // Calculate total qty
+  const totalQty = items.reduce((sum, item) => {
+    const qty = parseFloat(item.qty) || 0;
+    return sum + (isNaN(qty) ? 0 : qty);
+  }, 0);
+
   // Helper to calculate price after discount per unit
   const calculatePriceAfterDiscount = (item) => {
     if (!isSpecialTemplate) return null;
@@ -762,34 +768,48 @@ const ReportDetail = () => {
 
     setExportProgress({ current: 85, total: 100, message: "Adding summary..." });
 
-    // Summary row
-    const summaryRow = worksheet.addRow([
-      "TOTAL",
-      "",
-      ...(isSpecialTemplate ? ["", ""] : []),
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      toNumber(summary.totalCBM), // CBM - number
-      totalGrossUnit, // Gross W total from per-unit weights
-      totalNetUnit, // Net W total from per-unit weights
-      toNumber(summary.totalGW), // Total GW - number
-      toNumber(summary.totalNW), // Total NW - number
-      "",
-      ...(isSpecialTemplate ? [""] : []), // Price After Discount column (empty in summary)
-      toNumber(summary.totalUSD), // Total USD - number
-      "",
-      ...Array(customColumns.length).fill(""), // Empty cells for custom columns in summary
-    ]);
+    // Calculate total qty for Excel
+    const totalQtyExcel = items.reduce((sum, item) => {
+      const qty = parseFloat(item.qty) || 0;
+      return sum + (isNaN(qty) ? 0 : qty);
+    }, 0);
+
+    // Build summary row values based on actual header structure
+    const totalColumns = headerRow1.length;
+    const summaryValues = Array(totalColumns).fill("");
+
+    // Find key column indexes dynamically so we stay in-sync with headers
+    const qtyColIndex = headerRow1.findIndex((col) => col === "Qty") + 1;
+    const cbmColIndex = headerRow1.findIndex((col) => col === "CBM") + 1;
+    const grossWColIndex = headerRow1.findIndex((col) => col === "Weight (kgs)") + 1; // First child will be "Gross W"
+    const fobColIndex = headerRow1.findIndex((col) => col === "FOB") + 1;
+    const totalColIndex = headerRow1.findIndex((col) => col === "Total") + 1;
+
+    // Defensive setter in case structure changes
+    const safeSet = (valuesArray, colIndex, value) => {
+      if (colIndex > 0 && colIndex <= valuesArray.length) {
+        valuesArray[colIndex - 1] = value;
+      }
+    };
+
+    // "TOTAL" label in the first column (will be merged later)
+    summaryValues[0] = "TOTAL";
+
+    // Set numeric summary values in the correct columns
+    safeSet(summaryValues, qtyColIndex, toNumber(totalQtyExcel)); // Qty - number
+    safeSet(summaryValues, cbmColIndex, toNumber(summary.totalCBM)); // CBM - number
+
+    if (grossWColIndex > 0) {
+      safeSet(summaryValues, grossWColIndex, totalGrossUnit); // Gross W per-unit total
+      safeSet(summaryValues, grossWColIndex + 1, totalNetUnit); // Net W per-unit total
+      safeSet(summaryValues, grossWColIndex + 2, toNumber(summary.totalGW)); // Total GW - number
+      safeSet(summaryValues, grossWColIndex + 3, toNumber(summary.totalNW)); // Total NW - number
+    }
+
+    // Leave FOB and Price After Discount blank in summary, only set overall total amount
+    safeSet(summaryValues, totalColIndex, toNumber(summary.totalUSD)); // Total amount - number
+
+    const summaryRow = worksheet.addRow(summaryValues);
 
     summaryRow.eachCell((cell, colNumber) => {
       cell.font = { bold: true, color: { argb: "FF800000" } };
@@ -811,7 +831,9 @@ const ReportDetail = () => {
       }
     });
 
-    worksheet.mergeCells(summaryRow.number, 1, summaryRow.number, 19 + colOffset); // Merge from "TOTAL" label to before "FOB" column
+    // Merge from "TOTAL" label to the column just before "Qty"
+    const mergeEndCol = qtyColIndex > 1 ? qtyColIndex - 1 : 1;
+    worksheet.mergeCells(summaryRow.number, 1, summaryRow.number, mergeEndCol);
 
     setExportProgress({ current: 90, total: 100, message: "Generating file..." });
 
@@ -1299,9 +1321,12 @@ const ReportDetail = () => {
                 <tr className="bg-yellow-100 font-semibold">
                   <td
                     className="border border-gray-300 px-2 py-2 text-center"
-                    colSpan={isSpecialTemplate ? "15" : "13"}
+                    colSpan={isSpecialTemplate ? "14" : "12"}
                   >
                     TOTAL
+                  </td>
+                  <td className="border border-gray-300 px-2 py-2 text-center">
+                    {totalQty}
                   </td>
                   <td className="border border-gray-300 px-2 py-2 text-center">
                     {summary.totalCBM}
