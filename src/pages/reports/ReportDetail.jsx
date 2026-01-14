@@ -125,7 +125,7 @@ const ReportDetail = () => {
   const calculatePriceAfterDiscount = (item) => {
     if (!isSpecialTemplate) return null;
     const fobPrice = parseFloat(item.fob || item.fob_price || 0);
-    const discountType = item.discount_5 || 0;
+    const discountType = parseInt(item.discount_5) || 0;
     if (discountType === 5) {
       return fobPrice * 0.95;
     } else if (discountType === 10) {
@@ -676,7 +676,7 @@ const ReportDetail = () => {
         ...(isSpecialTemplate ? [
           (() => {
             const fobPrice = parseFloat(item.fob || item.fob_price || 0);
-            const discountType = item.discount_5 || 0;
+            const discountType = parseInt(item.discount_5) || 0;
             let priceAfterDiscount = fobPrice;
             if (discountType === 5) {
               priceAfterDiscount = fobPrice * 0.95;

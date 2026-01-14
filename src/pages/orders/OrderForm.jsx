@@ -106,7 +106,7 @@ const OrderForm = () => {
         items: order.items
           ? order.items.map((item) => ({
               ...item,
-              discount_5: item.discount_5 !== null && item.discount_5 !== undefined ? item.discount_5 : 0, // 0 = No discount, 5 = 5%, 10 = 10%
+              discount_5: item.discount_5 !== null && item.discount_5 !== undefined ? parseInt(item.discount_5) || 0 : 0, // 0 = No discount, 5 = 5%, 10 = 10%
               discount_10: null, // Not used anymore
               custom_column_values: item.custom_column_values
                 ? typeof item.custom_column_values === "string"
