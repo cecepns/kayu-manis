@@ -121,6 +121,19 @@ const ReportDetail = () => {
   const displayTotalGrossUnit = totalGrossUnit.toFixed(2);
   const displayTotalNetUnit = totalNetUnit.toFixed(2);
 
+  // Helper to calculate price after discount per unit
+  const calculatePriceAfterDiscount = (item) => {
+    if (!isSpecialTemplate) return null;
+    const fobPrice = parseFloat(item.fob || item.fob_price || 0);
+    const discountType = item.discount_5 || 0;
+    if (discountType === 5) {
+      return fobPrice * 0.95;
+    } else if (discountType === 10) {
+      return fobPrice * 0.90;
+    }
+    return fobPrice;
+  };
+
   const handleExportExcel = async () => {
     if (!items || !Array.isArray(items)) return;
 
@@ -354,6 +367,7 @@ const ReportDetail = () => {
       "",
       "",
       "FOB",
+      ...(isSpecialTemplate ? ["Price After Discount"] : []),
       "Total",
       "HS Code",
       ...customColumns, // Add custom columns
@@ -380,6 +394,7 @@ const ReportDetail = () => {
       "Total GW",
       "Total NW",
       displayCurrency,
+      ...(isSpecialTemplate ? [displayCurrency] : []),
       displayCurrency,
       "",
       ...Array(customColumns.length).fill(""), // Add empty cells for custom columns
@@ -405,9 +420,11 @@ const ReportDetail = () => {
     worksheet.mergeCells(headerRow1Index, 12 + colOffset, headerRow2Index, 12 + colOffset); // Color
     worksheet.mergeCells(headerRow1Index, 13 + colOffset, headerRow2Index, 13 + colOffset); // Qty
     worksheet.mergeCells(headerRow1Index, 14 + colOffset, headerRow2Index, 14 + colOffset); // CBM
-    // FOB and Total are NOT merged - they show currency in row 2
+    // FOB, Price After Discount (if special), and Total are NOT merged - they show currency in row 2
     // Only HS Code is merged vertically
-    worksheet.mergeCells(headerRow1Index, 21 + colOffset, headerRow2Index, 21 + colOffset); // HS Code
+    // HS Code position: 21 + colOffset for normal, 22 + colOffset for special (after Price After Discount)
+    const hsCodeCol = isSpecialTemplate ? 22 + colOffset : 21 + colOffset;
+    worksheet.mergeCells(headerRow1Index, hsCodeCol, headerRow2Index, hsCodeCol); // HS Code
 
     worksheet.mergeCells(headerRow1Index, 6 + (isSpecialTemplate ? 2 : 0), headerRow1Index, 8 + (isSpecialTemplate ? 2 : 0)); // Size (cm)
     worksheet.mergeCells(headerRow1Index, 9 + (isSpecialTemplate ? 2 : 0), headerRow1Index, 11 + (isSpecialTemplate ? 2 : 0)); // Packing Size (cm)
@@ -415,8 +432,9 @@ const ReportDetail = () => {
 
     // Merge custom columns (each custom column spans both header rows)
     // At this point, colOffset is 2 for special template (Client Barcode + Client Description) and 0 for regular template
-    // HS Code is at column 21 + colOffset, so custom columns start at 22 + colOffset
-    const customColStartIndex = 22 + colOffset; // Start after HS Code
+    // HS Code position: 21 + colOffset for normal, 22 + colOffset for special (after Price After Discount)
+    // Custom columns start after HS Code
+    const customColStartIndex = hsCodeCol + 1; // Start after HS Code
     customColumns.forEach((_, index) => {
       const colIndex = customColStartIndex + index;
       worksheet.mergeCells(
@@ -480,6 +498,7 @@ const ReportDetail = () => {
       10, // Total GW
       10, // Total NW
       12, // FOB
+      ...(isSpecialTemplate ? [15] : []), // Price After Discount
       14, // Total
       18, // HS Code (increased width)
       ...Array(customColumns.length).fill(15), // Custom columns width
@@ -653,7 +672,20 @@ const ReportDetail = () => {
         toNumber(item.net_weight ?? item.net_weight_total), // Net W - number
         toNumber(item.total_gw_total), // Total GW - number
         toNumber(item.total_nw_total), // Total NW - number
-        toNumber(item.fob || item.fob_price), // FOB - number (already includes discount if applicable)
+        toNumber(item.fob || item.fob_price), // FOB - number
+        ...(isSpecialTemplate ? [
+          (() => {
+            const fobPrice = parseFloat(item.fob || item.fob_price || 0);
+            const discountType = item.discount_5 || 0;
+            let priceAfterDiscount = fobPrice;
+            if (discountType === 5) {
+              priceAfterDiscount = fobPrice * 0.95;
+            } else if (discountType === 10) {
+              priceAfterDiscount = fobPrice * 0.90;
+            }
+            return toNumber(priceAfterDiscount);
+          })()
+        ] : []),
         toNumber(item.fob_total_usd || item.fob_total), // Total - number
         item.hs_code || "",
         ...customColumns.map((col) => {
@@ -753,6 +785,7 @@ const ReportDetail = () => {
       toNumber(summary.totalGW), // Total GW - number
       toNumber(summary.totalNW), // Total NW - number
       "",
+      ...(isSpecialTemplate ? [""] : []), // Price After Discount column (empty in summary)
       toNumber(summary.totalUSD), // Total USD - number
       "",
       ...Array(customColumns.length).fill(""), // Empty cells for custom columns in summary
@@ -1076,6 +1109,11 @@ const ReportDetail = () => {
                   <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
                     FOB
                   </th>
+                  {isSpecialTemplate && (
+                    <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
+                      Price After Discount
+                    </th>
+                  )}
                   <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
                     Total
                   </th>
@@ -1130,14 +1168,9 @@ const ReportDetail = () => {
                     {displayCurrency}
                   </th>
                   {isSpecialTemplate && (
-                    <>
-                      <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
-                        {displayCurrency}
-                      </th>
-                      <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
-                        {displayCurrency}
-                      </th>
-                    </>
+                    <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
+                      {displayCurrency}
+                    </th>
                   )}
                   <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
                     {displayCurrency}
@@ -1226,6 +1259,18 @@ const ReportDetail = () => {
                     <td className="border border-gray-300 px-2 py-2 text-center">
                       <div>{item.fob || item.fob_price || "-"}</div>
                     </td>
+                    {isSpecialTemplate && (
+                      <td className="border border-gray-300 px-2 py-2 text-center">
+                        <div>
+                          {(() => {
+                            const priceAfterDiscount = calculatePriceAfterDiscount(item);
+                            return priceAfterDiscount !== null && priceAfterDiscount !== undefined
+                              ? priceAfterDiscount.toFixed(2)
+                              : "-";
+                          })()}
+                        </div>
+                      </td>
+                    )}
                     <td className="border border-gray-300 px-2 py-2 text-center font-medium">
                       <div>{item.fob_total_usd || item.fob_total || "-"}</div>
                     </td>
@@ -1278,6 +1323,11 @@ const ReportDetail = () => {
                   <td className="border border-gray-300 px-2 py-2 text-center">
                     <div>-</div>
                   </td>
+                  {isSpecialTemplate && (
+                    <td className="border border-gray-300 px-2 py-2 text-center">
+                      <div>-</div>
+                    </td>
+                  )}
                   <td className="border border-gray-300 px-2 py-2 text-center text-green-600">
                     <div>{summary.totalUSD}</div>
                   </td>

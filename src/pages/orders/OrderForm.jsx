@@ -508,6 +508,7 @@ const OrderForm = () => {
           totalNetWeight:
             acc.totalNetWeight + parseFloat(item.net_weight_total || 0),
           totalGW: acc.totalGW + parseFloat(item.total_gw_total || 0),
+          totalQuantity: acc.totalQuantity + parseFloat(item.qty || 0),
         };
       },
       {
@@ -516,6 +517,7 @@ const OrderForm = () => {
         totalGrossWeight: 0,
         totalNetWeight: 0,
         totalGW: 0,
+        totalQuantity: 0,
       }
     );
 
@@ -826,7 +828,7 @@ const OrderForm = () => {
                 <option value="">Pilih volume kontainer</option>
                 <option value='1 x 20"'>1 x 20&quot;</option>
                 <option value='1 x 40"'>1 x 40&quot;</option>
-                <option value='1 x 40" HC'>1 x 40&quot; H</option>
+                <option value='1 x 40" HC'>1 x 40&quot; HC</option>
               </select>
             </div>
             <div>
@@ -1279,9 +1281,9 @@ const OrderForm = () => {
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-gray-900">
-                {totals.totalGW.toFixed(2)}
+                {totals.totalQuantity.toFixed(0)}
               </div>
-              <div className="text-sm text-gray-600">Total GW (kg)</div>
+              <div className="text-sm text-gray-600">Total Quantity</div>
             </div>
           </div>
         </div>
