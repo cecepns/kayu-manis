@@ -94,10 +94,10 @@ export const productsAPI = {
     }
   },
 
-  // Get products for select dropdown
-  getProductsForSelect: async () => {
+  // Get products for select dropdown with search (for react-select)
+  getProductsForSelect: async (search = '') => {
     try {
-      const response = await api.get('/products/select');
+      const response = await api.get(`/products/select?search=${encodeURIComponent(search)}`);
       return response.data;
     } catch (error) {
       throw error.response?.data || error.message;

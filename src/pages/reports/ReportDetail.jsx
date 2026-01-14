@@ -354,7 +354,6 @@ const ReportDetail = () => {
       "",
       "",
       "FOB",
-      ...(isSpecialTemplate ? ["Discount 5%", "Discount 10%"] : []),
       "Total",
       "HS Code",
       ...customColumns, // Add custom columns
@@ -381,7 +380,6 @@ const ReportDetail = () => {
       "Total GW",
       "Total NW",
       displayCurrency,
-      ...(isSpecialTemplate ? [displayCurrency, displayCurrency] : []),
       displayCurrency,
       "",
       ...Array(customColumns.length).fill(""), // Add empty cells for custom columns
@@ -407,11 +405,8 @@ const ReportDetail = () => {
     worksheet.mergeCells(headerRow1Index, 12 + colOffset, headerRow2Index, 12 + colOffset); // Color
     worksheet.mergeCells(headerRow1Index, 13 + colOffset, headerRow2Index, 13 + colOffset); // Qty
     worksheet.mergeCells(headerRow1Index, 14 + colOffset, headerRow2Index, 14 + colOffset); // CBM
-    // FOB, Discount 5%, Discount 10%, and Total are NOT merged - they show currency in row 2
+    // FOB and Total are NOT merged - they show currency in row 2
     // Only HS Code is merged vertically
-    if (isSpecialTemplate) {
-      colOffset += 2; // Account for discount columns
-    }
     worksheet.mergeCells(headerRow1Index, 21 + colOffset, headerRow2Index, 21 + colOffset); // HS Code
 
     worksheet.mergeCells(headerRow1Index, 6 + (isSpecialTemplate ? 2 : 0), headerRow1Index, 8 + (isSpecialTemplate ? 2 : 0)); // Size (cm)
@@ -419,7 +414,7 @@ const ReportDetail = () => {
     worksheet.mergeCells(headerRow1Index, 15 + (isSpecialTemplate ? 2 : 0), headerRow1Index, 18 + (isSpecialTemplate ? 2 : 0)); // Weight (kgs)
 
     // Merge custom columns (each custom column spans both header rows)
-    // At this point, colOffset is 4 for special template and 0 for regular template
+    // At this point, colOffset is 2 for special template (Client Barcode + Client Description) and 0 for regular template
     // HS Code is at column 21 + colOffset, so custom columns start at 22 + colOffset
     const customColStartIndex = 22 + colOffset; // Start after HS Code
     customColumns.forEach((_, index) => {
@@ -485,7 +480,6 @@ const ReportDetail = () => {
       10, // Total GW
       10, // Total NW
       12, // FOB
-      ...(isSpecialTemplate ? [12, 12] : []), // Discount 5%, Discount 10%
       14, // Total
       18, // HS Code (increased width)
       ...Array(customColumns.length).fill(15), // Custom columns width
@@ -659,11 +653,7 @@ const ReportDetail = () => {
         toNumber(item.net_weight ?? item.net_weight_total), // Net W - number
         toNumber(item.total_gw_total), // Total GW - number
         toNumber(item.total_nw_total), // Total NW - number
-        toNumber(item.fob || item.fob_price), // FOB - number
-        ...(isSpecialTemplate ? [
-          toNumber(item.discount_5), // Discount 5% - number
-          toNumber(item.discount_10), // Discount 10% - number
-        ] : []),
+        toNumber(item.fob || item.fob_price), // FOB - number (already includes discount if applicable)
         toNumber(item.fob_total_usd || item.fob_total), // Total - number
         item.hs_code || "",
         ...customColumns.map((col) => {
@@ -763,7 +753,6 @@ const ReportDetail = () => {
       toNumber(summary.totalGW), // Total GW - number
       toNumber(summary.totalNW), // Total NW - number
       "",
-      ...(isSpecialTemplate ? ["", ""] : []), // Empty cells for discounts in summary
       toNumber(summary.totalUSD), // Total USD - number
       "",
       ...Array(customColumns.length).fill(""), // Empty cells for custom columns in summary
@@ -789,7 +778,7 @@ const ReportDetail = () => {
       }
     });
 
-    worksheet.mergeCells(summaryRow.number, 1, summaryRow.number, 13 + (isSpecialTemplate ? 2 : 0));
+    worksheet.mergeCells(summaryRow.number, 1, summaryRow.number, 19 + colOffset); // Merge from "TOTAL" label to before "FOB" column
 
     setExportProgress({ current: 90, total: 100, message: "Generating file..." });
 
@@ -1087,16 +1076,6 @@ const ReportDetail = () => {
                   <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
                     FOB
                   </th>
-                  {isSpecialTemplate && (
-                    <>
-                      <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
-                        Discount 5%
-                      </th>
-                      <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
-                        Discount 10%
-                      </th>
-                    </>
-                  )}
                   <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
                     Total
                   </th>
@@ -1247,16 +1226,6 @@ const ReportDetail = () => {
                     <td className="border border-gray-300 px-2 py-2 text-center">
                       <div>{item.fob || item.fob_price || "-"}</div>
                     </td>
-                    {isSpecialTemplate && (
-                      <>
-                        <td className="border border-gray-300 px-2 py-2 text-center">
-                          {item.discount_5 ? formatCurrency(item.discount_5, displayCurrency) : "-"}
-                        </td>
-                        <td className="border border-gray-300 px-2 py-2 text-center">
-                          {item.discount_10 ? formatCurrency(item.discount_10, displayCurrency) : "-"}
-                        </td>
-                      </>
-                    )}
                     <td className="border border-gray-300 px-2 py-2 text-center font-medium">
                       <div>{item.fob_total_usd || item.fob_total || "-"}</div>
                     </td>
@@ -1309,16 +1278,6 @@ const ReportDetail = () => {
                   <td className="border border-gray-300 px-2 py-2 text-center">
                     <div>-</div>
                   </td>
-                  {isSpecialTemplate && (
-                    <>
-                      <td className="border border-gray-300 px-2 py-2 text-center">
-                        <div>-</div>
-                      </td>
-                      <td className="border border-gray-300 px-2 py-2 text-center">
-                        <div>-</div>
-                      </td>
-                    </>
-                  )}
                   <td className="border border-gray-300 px-2 py-2 text-center text-green-600">
                     <div>{summary.totalUSD}</div>
                   </td>

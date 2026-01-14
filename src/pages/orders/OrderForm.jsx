@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Package } from 'lucide-react';
-import Select from 'react-select';
-import { ordersAPI } from '../../utils/apiOrders';
-import { productsAPI } from '../../utils/apiProducts';
-import { buyersAPI } from '../../utils/apiBuyers';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, Plus, Trash2, Package } from "lucide-react";
+import Select from "react-select";
+import { ordersAPI } from "../../utils/apiOrders";
+import { productsAPI } from "../../utils/apiProducts";
+import { buyersAPI } from "../../utils/apiBuyers";
+import LoadingSpinner from "../../components/common/LoadingSpinner";
 
 const OrderForm = () => {
   const navigate = useNavigate();
@@ -19,23 +19,23 @@ const OrderForm = () => {
   const buyerSearchTimeoutRef = useRef(null);
 
   const [orderData, setOrderData] = useState({
-    no_pi: '',
-    buyer_name: '',
-    buyer_address: '',
-    currency: 'USD',
+    no_pi: "",
+    buyer_name: "",
+    buyer_address: "",
+    currency: "USD",
     // Manual invoice date (instead of using created_at)
-    invoice_date: '',
+    invoice_date: "",
     // Shipment info
-    volume: '',
-    port_loading: '',
-    destination_port: '',
+    volume: "",
+    port_loading: "",
+    destination_port: "",
     // Template type for Excel export
-    template_type: 'normal',
+    template_type: "normal",
     // Custom columns (max 5)
     custom_columns: [],
     items: [
       {
-        product_id: '',
+        product_id: "",
         client_code: null,
         qty: 1,
         cbm_total: 0,
@@ -43,11 +43,11 @@ const OrderForm = () => {
         gross_weight_total: 0,
         net_weight_total: 0,
         total_gw_total: 0,
-        discount_5: null,
-        discount_10: null,
-        custom_column_values: {}
-      }
-    ]
+        discount_5: 0, // 0 = No discount, 5 = 5% discount (multiply by 0.95), 10 = 10% discount (multiply by 0.90)
+        discount_10: null, // Not used anymore, kept for backward compatibility
+        custom_column_values: {},
+      },
+    ],
   });
 
   const loadProducts = useCallback(async () => {
@@ -55,21 +55,23 @@ const OrderForm = () => {
       const response = await productsAPI.getProductsForSelect();
       setProducts(response.products || []);
     } catch (error) {
-      console.error('Error loading products:', error);
+      console.error("Error loading products:", error);
     }
   }, []);
 
-  const loadBuyers = useCallback(async (search = '') => {
+  const loadBuyers = useCallback(async (search = "") => {
     try {
       const response = await buyersAPI.getBuyersForSelect(search);
       const buyers = response.buyers || [];
-      setBuyerOptions(buyers.map(buyer => ({
-        value: buyer.id,
-        label: buyer.name,
-        buyer: buyer // Keep full buyer object for easy access
-      })));
+      setBuyerOptions(
+        buyers.map((buyer) => ({
+          value: buyer.id,
+          label: buyer.name,
+          buyer: buyer, // Keep full buyer object for easy access
+        }))
+      );
     } catch (error) {
-      console.error('Error loading buyers:', error);
+      console.error("Error loading buyers:", error);
     }
   }, []);
 
@@ -78,33 +80,45 @@ const OrderForm = () => {
     try {
       setLoading(true);
       const order = await ordersAPI.getOrder(id);
-      
+
       // Load buyers to find matching buyer for the select
       if (order.buyer_name) {
         await loadBuyers(order.buyer_name);
       }
-      
+
       setOrderData({
-        no_pi: order.no_pi || '',
-        buyer_name: order.buyer_name || '',
-        buyer_address: order.buyer_address || '',
-        currency: order.currency || 'USD',
-        invoice_date: order.invoice_date ? order.invoice_date.substring(0, 10) : '',
-        volume: order.volume || '',
-        port_loading: order.port_loading || '',
-        destination_port: order.destination_port || '',
-        template_type: order.template_type || 'normal',
-        custom_columns: order.custom_columns ? (typeof order.custom_columns === 'string' ? JSON.parse(order.custom_columns) : order.custom_columns) : [],
-        items: order.items ? order.items.map(item => ({
-          ...item,
-          discount_5: item.discount_5 || null,
-          discount_10: item.discount_10 || null,
-          custom_column_values: item.custom_column_values ? (typeof item.custom_column_values === 'string' ? JSON.parse(item.custom_column_values) : item.custom_column_values) : {}
-        })) : []
+        no_pi: order.no_pi || "",
+        buyer_name: order.buyer_name || "",
+        buyer_address: order.buyer_address || "",
+        currency: order.currency || "USD",
+        invoice_date: order.invoice_date
+          ? order.invoice_date.substring(0, 10)
+          : "",
+        volume: order.volume || "",
+        port_loading: order.port_loading || "",
+        destination_port: order.destination_port || "",
+        template_type: order.template_type || "normal",
+        custom_columns: order.custom_columns
+          ? typeof order.custom_columns === "string"
+            ? JSON.parse(order.custom_columns)
+            : order.custom_columns
+          : [],
+        items: order.items
+          ? order.items.map((item) => ({
+              ...item,
+              discount_5: item.discount_5 !== null && item.discount_5 !== undefined ? item.discount_5 : 0, // 0 = No discount, 5 = 5%, 10 = 10%
+              discount_10: null, // Not used anymore
+              custom_column_values: item.custom_column_values
+                ? typeof item.custom_column_values === "string"
+                  ? JSON.parse(item.custom_column_values)
+                  : item.custom_column_values
+                : {},
+            }))
+          : [],
       });
     } catch (error) {
-      console.error('Error loading order:', error);
-      alert('Error loading order');
+      console.error("Error loading order:", error);
+      alert("Error loading order");
     } finally {
       setLoading(false);
     }
@@ -112,10 +126,10 @@ const OrderForm = () => {
 
   // Transform products to react-select format
   const productOptions = useMemo(() => {
-    return products.map(product => ({
+    return products.map((product) => ({
       value: product.id.toString(),
-      label: `${product.km_code} - ${product.description}`,
-      product: product // Keep full product object for easy access
+      label: `${product.client_code ? product.client_code + ' - ' : ''}${product.km_code} - ${product.description || ''}`,
+      product: product, // Keep full product object for easy access
     }));
   }, [products]);
 
@@ -132,30 +146,30 @@ const OrderForm = () => {
 
   const handleOrderInfoChange = (e) => {
     const { name, value } = e.target;
-    setOrderData(prev => ({
+    setOrderData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
   };
 
   const handleBuyerChange = (selectedOption) => {
     if (selectedOption && selectedOption.buyer) {
-      setOrderData(prev => ({
+      setOrderData((prev) => ({
         ...prev,
         buyer_name: selectedOption.buyer.name,
-        buyer_address: selectedOption.buyer.address
+        buyer_address: selectedOption.buyer.address,
       }));
     } else {
-      setOrderData(prev => ({
+      setOrderData((prev) => ({
         ...prev,
-        buyer_name: '',
-        buyer_address: ''
+        buyer_name: "",
+        buyer_address: "",
       }));
     }
   };
 
   const handleBuyerInputChange = (inputValue, { action }) => {
-    if (action === 'input-change') {
+    if (action === "input-change") {
       // Clear existing timeout
       if (buyerSearchTimeoutRef.current) {
         clearTimeout(buyerSearchTimeoutRef.current);
@@ -169,79 +183,79 @@ const OrderForm = () => {
 
   const handleItemChange = (index, field, value) => {
     const updatedItems = [...orderData.items];
-    
+
     // For product_id from react-select, extract the value string
-    const fieldValue = field === 'product_id' && typeof value === 'object' && value !== null 
-      ? value.value 
-      : value;
-    
+    const fieldValue =
+      field === "product_id" && typeof value === "object" && value !== null
+        ? value.value
+        : value;
+
     updatedItems[index] = {
       ...updatedItems[index],
-      [field]: fieldValue
+      [field]: fieldValue,
     };
 
     // Auto-calculate when product, qty, fob, or discount changes
-    if (field === 'product_id' || field === 'qty' || field === 'fob' || field === 'discount_5' || field === 'discount_10') {
-      const productId = field === 'product_id' ? fieldValue : updatedItems[index].product_id;
-      const product = products.find(p => p.id === parseInt(productId));
+    if (
+      field === "product_id" ||
+      field === "qty" ||
+      field === "fob" ||
+      field === "discount_5"
+    ) {
+      const productId =
+        field === "product_id" ? fieldValue : updatedItems[index].product_id;
+      const product = products.find((p) => p.id === parseInt(productId));
       const qty = parseInt(updatedItems[index].qty) || 0;
-      
+
       // Get FOB price: use custom fob if set, otherwise use product.fob_price
       let fobPrice = 0;
-      if (field === 'fob') {
+      if (field === "fob") {
         // User is editing FOB price directly
         fobPrice = parseFloat(fieldValue) || 0;
       } else {
         // Use existing custom fob if available, otherwise use product price
         const existingFob = updatedItems[index].fob;
-        if (existingFob && existingFob !== '') {
+        if (existingFob && existingFob !== "") {
           fobPrice = parseFloat(existingFob) || 0;
         } else if (product && product.fob_price) {
           fobPrice = parseFloat(product.fob_price) || 0;
         }
       }
-      
-      // Calculate discounts if special template
-      let discount5 = null;
-      let discount10 = null;
-      if (orderData.template_type === 'special' && fobPrice > 0) {
-        if (field === 'discount_5') {
-          discount5 = parseFloat(fieldValue) || 0;
+
+      // Get discount type (0 = No discount, 5 = 5%, 10 = 10%)
+      let discountType = 0;
+      if (orderData.template_type === "special") {
+        if (field === "discount_5") {
+          discountType = parseInt(fieldValue) || 0;
         } else {
-          discount5 = parseFloat(updatedItems[index].discount_5) || 0;
-        }
-        
-        if (field === 'discount_10') {
-          discount10 = parseFloat(fieldValue) || 0;
-        } else {
-          discount10 = parseFloat(updatedItems[index].discount_10) || 0;
-        }
-        
-        // Auto-calculate discounts if not manually set
-        if (field !== 'discount_5' && field !== 'discount_10') {
-          if (!updatedItems[index].discount_5 || updatedItems[index].discount_5 === '') {
-            discount5 = fobPrice * 0.05;
-          }
-          if (!updatedItems[index].discount_10 || updatedItems[index].discount_10 === '') {
-            discount10 = fobPrice * 0.10;
-          }
+          discountType = parseInt(updatedItems[index].discount_5) || 0;
         }
       }
-      
-      // Calculate final FOB price after discounts
+
+      // Calculate final FOB price after discount (multiply by multiplier)
       let finalFobPrice = fobPrice;
-      if (orderData.template_type === 'special') {
-        finalFobPrice = fobPrice - (discount5 || 0) - (discount10 || 0);
+      if (orderData.template_type === "special") {
+        if (discountType === 5) {
+          finalFobPrice = fobPrice * 0.95;
+        } else if (discountType === 10) {
+          finalFobPrice = fobPrice * 0.90;
+        } else {
+          finalFobPrice = fobPrice * 1.0; // No discount
+        }
         if (finalFobPrice < 0) finalFobPrice = 0;
       }
-      
+
       if (product && qty > 0 && productId) {
         // Calculate CBM:
         // 1. Prefer packing dimensions: W x D x H x QTY / 1,000,000
         // 2. Fallback to product.cbm * QTY if packing dimensions are not available
         let cbmTotal = 0;
 
-        if (product.packing_width && product.packing_depth && product.packing_height) {
+        if (
+          product.packing_width &&
+          product.packing_depth &&
+          product.packing_height
+        ) {
           const width = parseFloat(product.packing_width) || 0;
           const depth = parseFloat(product.packing_depth) || 0;
           const height = parseFloat(product.packing_height) || 0;
@@ -260,9 +274,12 @@ const OrderForm = () => {
         const cbmTotalFormatted = parseFloat(cbmTotal || 0).toFixed(4);
 
         // Update FOB price: if product was just selected, set it from product, otherwise keep existing
-        const newFob = field === 'product_id' && !updatedItems[index].fob 
-          ? (product.fob_price || '') 
-          : (field === 'fob' ? fieldValue : updatedItems[index].fob || product.fob_price || '');
+        const newFob =
+          field === "product_id" && !updatedItems[index].fob
+            ? product.fob_price || ""
+            : field === "fob"
+            ? fieldValue
+            : updatedItems[index].fob || product.fob_price || "";
 
         updatedItems[index] = {
           ...updatedItems[index],
@@ -270,15 +287,24 @@ const OrderForm = () => {
           client_code: product.client_code || null,
           cbm_total: cbmTotalFormatted,
           fob_total_usd: (finalFobPrice * qty).toFixed(2),
-          gross_weight_total: (parseFloat(product.gross_weight || 0) * qty).toFixed(2),
-          net_weight_total: (parseFloat(product.net_weight || 0) * qty).toFixed(2),
-          total_gw_total: (parseFloat(product.gross_weight || 0) * qty).toFixed(2), // Use gross_weight instead of total_gw
-          total_nw_total: (parseFloat(product.net_weight || 0) * qty).toFixed(2), // Use net_weight instead of total_nw
+          gross_weight_total: (
+            parseFloat(product.gross_weight || 0) * qty
+          ).toFixed(2),
+          net_weight_total: (parseFloat(product.net_weight || 0) * qty).toFixed(
+            2
+          ),
+          total_gw_total: (parseFloat(product.gross_weight || 0) * qty).toFixed(
+            2
+          ), // Use gross_weight instead of total_gw
+          total_nw_total: (parseFloat(product.net_weight || 0) * qty).toFixed(
+            2
+          ), // Use net_weight instead of total_nw
           fob: newFob,
-          discount_5: orderData.template_type === 'special' ? (discount5 || null) : null,
-          discount_10: orderData.template_type === 'special' ? (discount10 || null) : null
+          discount_5:
+            orderData.template_type === "special" ? discountType : 0,
+          discount_10: null, // Not used anymore
         };
-      } else if (field === 'product_id' && !productId) {
+      } else if (field === "product_id" && !productId) {
         // Reset calculations when product is cleared
         updatedItems[index] = {
           ...updatedItems[index],
@@ -289,58 +315,70 @@ const OrderForm = () => {
           net_weight_total: 0,
           total_gw_total: 0,
           total_nw_total: 0,
-          fob: '',
+          fob: "",
           discount_5: null,
-          discount_10: null
+          discount_10: null,
         };
-      } else if ((field === 'fob' || field === 'discount_5' || field === 'discount_10') && productId) {
+      } else if (
+        (field === "fob" || field === "discount_5") &&
+        productId
+      ) {
         // FOB price or discount changed, recalculate total
         const qty = parseInt(updatedItems[index].qty) || 0;
         let baseFobPrice = parseFloat(updatedItems[index].fob) || 0;
-        if (field === 'fob') {
+        if (field === "fob") {
           baseFobPrice = parseFloat(fieldValue) || 0;
         }
-        
-        // Calculate discounts
-        let discount5 = parseFloat(updatedItems[index].discount_5) || 0;
-        let discount10 = parseFloat(updatedItems[index].discount_10) || 0;
-        if (field === 'discount_5') {
-          discount5 = parseFloat(fieldValue) || 0;
+
+        // Get discount type (0 = No discount, 5 = 5%, 10 = 10%)
+        let discountType = 0;
+        if (orderData.template_type === "special") {
+          if (field === "discount_5") {
+            discountType = parseInt(fieldValue) || 0;
+          } else {
+            discountType = parseInt(updatedItems[index].discount_5) || 0;
+          }
         }
-        if (field === 'discount_10') {
-          discount10 = parseFloat(fieldValue) || 0;
-        }
-        
-        // Calculate final FOB price after discounts
+
+        // Calculate final FOB price after discount (multiply by multiplier)
         let finalFobPrice = baseFobPrice;
-        if (orderData.template_type === 'special') {
-          finalFobPrice = baseFobPrice - discount5 - discount10;
+        if (orderData.template_type === "special") {
+          if (discountType === 5) {
+            finalFobPrice = baseFobPrice * 0.95;
+          } else if (discountType === 10) {
+            finalFobPrice = baseFobPrice * 0.90;
+          } else {
+            finalFobPrice = baseFobPrice * 1.0; // No discount
+          }
           if (finalFobPrice < 0) finalFobPrice = 0;
         }
-        
+
         updatedItems[index] = {
           ...updatedItems[index],
-          fob: field === 'fob' ? fieldValue : updatedItems[index].fob,
-          discount_5: field === 'discount_5' ? (fieldValue || null) : updatedItems[index].discount_5,
-          discount_10: field === 'discount_10' ? (fieldValue || null) : updatedItems[index].discount_10,
-          fob_total_usd: (finalFobPrice * qty).toFixed(2)
+          fob: field === "fob" ? fieldValue : updatedItems[index].fob,
+          discount_5:
+            field === "discount_5"
+              ? parseInt(fieldValue) || 0
+              : updatedItems[index].discount_5,
+          discount_10: null, // Not used anymore
+          fob_total_usd: (finalFobPrice * qty).toFixed(2),
         };
       }
     }
 
-    setOrderData(prev => ({
+    setOrderData((prev) => ({
       ...prev,
-      items: updatedItems
+      items: updatedItems,
     }));
   };
 
   const addItem = () => {
-    setOrderData(prev => ({
+    setOrderData((prev) => ({
       ...prev,
       items: [
         ...prev.items,
         {
-          product_id: '',
+          product_id: "",
           client_code: null,
           qty: 1,
           cbm_total: 0,
@@ -349,57 +387,57 @@ const OrderForm = () => {
           net_weight_total: 0,
           total_gw_total: 0,
           total_nw_total: 0,
-          fob: '',
+          fob: "",
           discount_5: null,
           discount_10: null,
           custom_column_values: prev.custom_columns.reduce((acc, col) => {
-            acc[col] = '';
+            acc[col] = "";
             return acc;
-          }, {})
-        }
-      ]
+          }, {}),
+        },
+      ],
     }));
   };
 
   const addCustomColumn = () => {
     if (orderData.custom_columns.length >= 5) {
-      alert('Maksimal 5 kolom kustom');
+      alert("Maksimal 5 kolom kustom");
       return;
     }
-    setOrderData(prev => ({
+    setOrderData((prev) => ({
       ...prev,
-      custom_columns: [...prev.custom_columns, '']
+      custom_columns: [...prev.custom_columns, ""],
     }));
   };
 
   const removeCustomColumn = (index) => {
     const columnName = orderData.custom_columns[index];
-    setOrderData(prev => {
+    setOrderData((prev) => {
       const newColumns = prev.custom_columns.filter((_, i) => i !== index);
-      const newItems = prev.items.map(item => {
+      const newItems = prev.items.map((item) => {
         const newValues = { ...item.custom_column_values };
         delete newValues[columnName];
         return {
           ...item,
-          custom_column_values: newValues
+          custom_column_values: newValues,
         };
       });
       return {
         ...prev,
         custom_columns: newColumns,
-        items: newItems
+        items: newItems,
       };
     });
   };
 
   const updateCustomColumnName = (index, value) => {
     const oldColumnName = orderData.custom_columns[index];
-    setOrderData(prev => {
+    setOrderData((prev) => {
       const newColumns = [...prev.custom_columns];
       newColumns[index] = value;
-      
+
       // Update custom_column_values untuk semua items
-      const newItems = prev.items.map(item => {
+      const newItems = prev.items.map((item) => {
         const newValues = { ...item.custom_column_values };
         if (oldColumnName && oldColumnName !== value) {
           // Pindahkan nilai dari nama kolom lama ke nama kolom baru
@@ -409,35 +447,35 @@ const OrderForm = () => {
           }
         } else if (!oldColumnName && value) {
           // Kolom baru, inisialisasi dengan string kosong
-          newValues[value] = '';
+          newValues[value] = "";
         }
         return {
           ...item,
-          custom_column_values: newValues
+          custom_column_values: newValues,
         };
       });
-      
+
       return {
         ...prev,
         custom_columns: newColumns,
-        items: newItems
+        items: newItems,
       };
     });
   };
 
   const handleCustomColumnValueChange = (itemIndex, columnName, value) => {
-    setOrderData(prev => {
+    setOrderData((prev) => {
       const newItems = [...prev.items];
       newItems[itemIndex] = {
         ...newItems[itemIndex],
         custom_column_values: {
           ...newItems[itemIndex].custom_column_values,
-          [columnName]: value
-        }
+          [columnName]: value,
+        },
       };
       return {
         ...prev,
-        items: newItems
+        items: newItems,
       };
     });
   };
@@ -452,53 +490,58 @@ const OrderForm = () => {
 
   const removeItem = (index) => {
     if (orderData.items.length > 1) {
-      setOrderData(prev => ({
+      setOrderData((prev) => ({
         ...prev,
-        items: prev.items.filter((_, i) => i !== index)
+        items: prev.items.filter((_, i) => i !== index),
       }));
     }
   };
 
   const calculateTotals = () => {
-    const totals = orderData.items.reduce((acc, item) => {
-      return {
-        totalCBM: acc.totalCBM + parseFloat(item.cbm_total || 0),
-        totalUSD: acc.totalUSD + parseFloat(item.fob_total_usd || 0),
-        totalGrossWeight: acc.totalGrossWeight + parseFloat(item.gross_weight_total || 0),
-        totalNetWeight: acc.totalNetWeight + parseFloat(item.net_weight_total || 0),
-        totalGW: acc.totalGW + parseFloat(item.total_gw_total || 0)
-      };
-    }, {
-      totalCBM: 0,
-      totalUSD: 0,
-      totalGrossWeight: 0,
-      totalNetWeight: 0,
-      totalGW: 0
-    });
+    const totals = orderData.items.reduce(
+      (acc, item) => {
+        return {
+          totalCBM: acc.totalCBM + parseFloat(item.cbm_total || 0),
+          totalUSD: acc.totalUSD + parseFloat(item.fob_total_usd || 0),
+          totalGrossWeight:
+            acc.totalGrossWeight + parseFloat(item.gross_weight_total || 0),
+          totalNetWeight:
+            acc.totalNetWeight + parseFloat(item.net_weight_total || 0),
+          totalGW: acc.totalGW + parseFloat(item.total_gw_total || 0),
+        };
+      },
+      {
+        totalCBM: 0,
+        totalUSD: 0,
+        totalGrossWeight: 0,
+        totalNetWeight: 0,
+        totalGW: 0,
+      }
+    );
 
     // Use currency from order level
     return {
       ...totals,
-      currency: orderData.currency || 'USD'
+      currency: orderData.currency || "USD",
     };
   };
 
   const getCurrencySymbol = (currency) => {
     const symbols = {
-      'USD': '$',
-      'EUR': '€',
-      'Rp': 'Rp',
-      'IDR': 'Rp'
+      USD: "$",
+      EUR: "€",
+      Rp: "Rp",
+      IDR: "Rp",
     };
-    return symbols[currency] || currency || '$';
+    return symbols[currency] || currency || "$";
   };
 
   const formatCurrency = (amount, currency) => {
-    const symbol = getCurrencySymbol(currency || 'USD');
-    const curr = currency || 'USD';
-    
+    const symbol = getCurrencySymbol(currency || "USD");
+    const curr = currency || "USD";
+
     // Format berdasarkan currency
-    if (curr === 'Rp' || curr === 'IDR') {
+    if (curr === "Rp" || curr === "IDR") {
       return `${symbol} ${parseFloat(amount || 0).toFixed(2)}`;
     } else {
       return `${symbol}${parseFloat(amount || 0).toFixed(2)}`;
@@ -507,19 +550,23 @@ const OrderForm = () => {
 
   const sanitizeOrderData = (data) => {
     // Helper to convert undefined to null (preserves 0, false, empty string)
-    const nullIfUndefined = (value) => value === undefined ? null : value;
+    const nullIfUndefined = (value) => (value === undefined ? null : value);
     // Helper to convert empty string to null for optional fields
-    const nullIfEmpty = (value) => (value === undefined || value === '' || value === null) ? null : value;
-    
+    const nullIfEmpty = (value) =>
+      value === undefined || value === "" || value === null ? null : value;
+
     return {
       ...data,
       volume: nullIfEmpty(data.volume),
       port_loading: nullIfEmpty(data.port_loading),
       destination_port: nullIfEmpty(data.destination_port),
-      custom_columns: data.custom_columns && data.custom_columns.length > 0 && data.custom_columns.some(col => col && col.trim()) 
-        ? data.custom_columns 
-        : null,
-      items: data.items.map(item => ({
+      custom_columns:
+        data.custom_columns &&
+        data.custom_columns.length > 0 &&
+        data.custom_columns.some((col) => col && col.trim())
+          ? data.custom_columns
+          : null,
+      items: data.items.map((item) => ({
         product_id: item.product_id || null,
         client_code: nullIfEmpty(item.client_code),
         qty: item.qty || null,
@@ -532,32 +579,34 @@ const OrderForm = () => {
         fob: nullIfEmpty(item.fob),
         discount_5: nullIfUndefined(item.discount_5),
         discount_10: nullIfUndefined(item.discount_10),
-        custom_column_values: item.custom_column_values && Object.keys(item.custom_column_values).length > 0 
-          ? item.custom_column_values 
-          : null
-      }))
+        custom_column_values:
+          item.custom_column_values &&
+          Object.keys(item.custom_column_values).length > 0
+            ? item.custom_column_values
+            : null,
+      })),
     };
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     try {
       setSaving(true);
-      
+
       // Sanitize data to ensure no undefined values
       const sanitizedData = sanitizeOrderData(orderData);
-      
+
       if (isEdit) {
         await ordersAPI.updateOrder(id, sanitizedData);
       } else {
         await ordersAPI.createOrder(sanitizedData);
       }
-      
-      navigate('/app/orders');
+
+      navigate("/app/orders");
     } catch (error) {
-      console.error('Error saving order:', error);
-      alert(error.details || error.message || 'Error saving order');
+      console.error("Error saving order:", error);
+      alert(error.details || error.message || "Error saving order");
     } finally {
       setSaving(false);
     }
@@ -573,16 +622,18 @@ const OrderForm = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center space-x-4">
-        <button 
-          onClick={() => navigate('/app/orders')}
+        <button
+          onClick={() => navigate("/app/orders")}
           className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
-          <h1 className="page-title">{isEdit ? 'Edit Order' : 'Create New Order'}</h1>
+          <h1 className="page-title">
+            {isEdit ? "Edit Order" : "Create New Order"}
+          </h1>
           <p className="page-subtitle">
-            {isEdit ? 'Update order information' : 'Add a new furniture order'}
+            {isEdit ? "Update order information" : "Add a new furniture order"}
           </p>
         </div>
       </div>
@@ -591,10 +642,15 @@ const OrderForm = () => {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Order Header */}
         <div className="card">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Order Information</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            Order Information
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label htmlFor="no_pi" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="no_pi"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 PI Number <span className="text-red-500">*</span>
               </label>
               <input
@@ -609,14 +665,22 @@ const OrderForm = () => {
               />
             </div>
             <div>
-              <label htmlFor="buyer_select" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="buyer_select"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Buyer <span className="text-red-500">*</span>
               </label>
               <Select
                 id="buyer_select"
-                value={buyerOptions.find(option => 
-                  option.buyer && option.buyer.name === orderData.buyer_name && option.buyer.address === orderData.buyer_address
-                ) || null}
+                value={
+                  buyerOptions.find(
+                    (option) =>
+                      option.buyer &&
+                      option.buyer.name === orderData.buyer_name &&
+                      option.buyer.address === orderData.buyer_address
+                  ) || null
+                }
                 onChange={handleBuyerChange}
                 onInputChange={handleBuyerInputChange}
                 options={buyerOptions}
@@ -625,27 +689,30 @@ const OrderForm = () => {
                 isSearchable
                 className="react-select-container"
                 classNamePrefix="react-select"
-                noOptionsMessage={() => 'No buyers found'}
+                noOptionsMessage={() => "No buyers found"}
                 styles={{
                   control: (base, state) => ({
                     ...base,
-                    minHeight: '42px',
-                    borderColor: state.isFocused ? '#3b82f6' : '#d1d5db',
-                    boxShadow: state.isFocused ? '0 0 0 1px #3b82f6' : 'none',
-                    '&:hover': {
-                      borderColor: state.isFocused ? '#3b82f6' : '#9ca3af'
-                    }
+                    minHeight: "42px",
+                    borderColor: state.isFocused ? "#3b82f6" : "#d1d5db",
+                    boxShadow: state.isFocused ? "0 0 0 1px #3b82f6" : "none",
+                    "&:hover": {
+                      borderColor: state.isFocused ? "#3b82f6" : "#9ca3af",
+                    },
                   }),
                   placeholder: (base) => ({
                     ...base,
-                    color: '#9ca3af'
-                  })
+                    color: "#9ca3af",
+                  }),
                 }}
                 required
               />
             </div>
             <div className="md:col-span-2">
-              <label htmlFor="buyer_address" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="buyer_address"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Buyer Address <span className="text-red-500">*</span>
               </label>
               <textarea
@@ -661,7 +728,10 @@ const OrderForm = () => {
               />
             </div>
             <div>
-              <label htmlFor="currency" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="currency"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Currency <span className="text-red-500">*</span>
               </label>
               <select
@@ -680,7 +750,10 @@ const OrderForm = () => {
             </div>
             {!isEdit && (
               <div>
-                <label htmlFor="template_type" className="block text-sm font-medium text-gray-700 mb-1">
+                <label
+                  htmlFor="template_type"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
                   Excel Template Type <span className="text-red-500">*</span>
                 </label>
                 <select
@@ -692,11 +765,14 @@ const OrderForm = () => {
                   className="input-field"
                 >
                   <option value="normal">Normal Template</option>
-                  <option value="special">Special Template (with discounts)</option>
+                  <option value="special">
+                    Special Template (with discounts)
+                  </option>
                 </select>
-                {orderData.template_type === 'special' && (
+                {orderData.template_type === "special" && (
                   <p className="text-xs text-gray-500 mt-1">
-                    Special template includes: Client Barcode, Discount 5%, Discount 10%
+                    Special template includes: Client Barcode, Discount 5%,
+                    Discount 10%
                   </p>
                 )}
               </div>
@@ -707,7 +783,9 @@ const OrderForm = () => {
                   Excel Template Type
                 </label>
                 <div className="input-field bg-gray-100 cursor-not-allowed">
-                  {orderData.template_type === 'special' ? 'Special Template' : 'Normal Template'}
+                  {orderData.template_type === "special"
+                    ? "Special Template"
+                    : "Normal Template"}
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
                   Template type cannot be changed after order creation
@@ -715,7 +793,10 @@ const OrderForm = () => {
               </div>
             )}
             <div>
-              <label htmlFor="invoice_date" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="invoice_date"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Invoice Date <span className="text-red-500">*</span>
               </label>
               <input
@@ -729,7 +810,10 @@ const OrderForm = () => {
               />
             </div>
             <div>
-              <label htmlFor="volume" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="volume"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Container Volume
               </label>
               <select
@@ -740,13 +824,16 @@ const OrderForm = () => {
                 className="input-field"
               >
                 <option value="">Pilih volume kontainer</option>
-                <option value="1 x 20&quot;">1 x 20&quot;</option>
-                <option value="1 x 40&quot;">1 x 40&quot;</option>
-                <option value="1 x 40&quot; H">1 x 40&quot; H</option>
+                <option value='1 x 20"'>1 x 20&quot;</option>
+                <option value='1 x 40"'>1 x 40&quot;</option>
+                <option value='1 x 40" HC'>1 x 40&quot; H</option>
               </select>
             </div>
             <div>
-              <label htmlFor="port_loading" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="port_loading"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Port of Loading
               </label>
               <input
@@ -760,7 +847,10 @@ const OrderForm = () => {
               />
             </div>
             <div>
-              <label htmlFor="destination_port" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="destination_port"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Destination Port
               </label>
               <input
@@ -779,7 +869,9 @@ const OrderForm = () => {
         {/* Custom Columns */}
         <div className="card">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Kolom Kustom</h2>
+            <h2 className="text-lg font-semibold text-gray-900">
+              Kolom Kustom
+            </h2>
             <button
               type="button"
               onClick={addCustomColumn}
@@ -797,7 +889,9 @@ const OrderForm = () => {
                   <input
                     type="text"
                     value={column}
-                    onChange={(e) => updateCustomColumnName(index, e.target.value)}
+                    onChange={(e) =>
+                      updateCustomColumnName(index, e.target.value)
+                    }
                     className="input-field flex-1"
                     placeholder="Masukan nama kolom"
                   />
@@ -814,7 +908,10 @@ const OrderForm = () => {
             </div>
           )}
           {orderData.custom_columns.length === 0 && (
-            <p className="text-sm text-gray-500">Belum ada kolom kustom. Klik &quot;Tambah Kolom Baru&quot; untuk menambahkan.</p>
+            <p className="text-sm text-gray-500">
+              Belum ada kolom kustom. Klik &quot;Tambah Kolom Baru&quot; untuk
+              menambahkan.
+            </p>
           )}
         </div>
 
@@ -822,24 +919,23 @@ const OrderForm = () => {
         <div className="card">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold text-gray-900">Order Items</h2>
-            <button
-              type="button"
-              onClick={addItem}
-              className="btn-primary"
-            >
-              <Plus className="w-4 h-4" />
-              Add Item
-            </button>
           </div>
-          
+
           <div className="space-y-4">
             {orderData.items.map((item, index) => {
-              const selectedProduct = products.find(p => p.id === parseInt(item.product_id));
-              
+              const selectedProduct = products.find(
+                (p) => p.id === parseInt(item.product_id)
+              );
+
               return (
-                <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <div
+                  key={index}
+                  className="border border-gray-200 rounded-lg p-4 bg-gray-50"
+                >
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-md font-medium text-gray-900">Item #{index + 1}</h3>
+                    <h3 className="text-md font-medium text-gray-900">
+                      Item #{index + 1}
+                    </h3>
                     {orderData.items.length > 1 && (
                       <button
                         type="button"
@@ -850,41 +946,54 @@ const OrderForm = () => {
                       </button>
                     )}
                   </div>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="lg:col-span-3">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Product <span className="text-red-500">*</span>
                       </label>
                       <Select
-                        value={productOptions.find(option => option.value === item.product_id?.toString()) || null}
-                        onChange={(selectedOption) => handleItemChange(index, 'product_id', selectedOption)}
+                        value={
+                          productOptions.find(
+                            (option) =>
+                              option.value === item.product_id?.toString()
+                          ) || null
+                        }
+                        onChange={(selectedOption) =>
+                          handleItemChange(index, "product_id", selectedOption)
+                        }
                         options={productOptions}
                         placeholder="Select a product"
                         isClearable
                         isSearchable
                         className="react-select-container"
                         classNamePrefix="react-select"
-                        noOptionsMessage={() => 'No products found'}
+                        noOptionsMessage={() => "No products found"}
                         styles={{
                           control: (base, state) => ({
                             ...base,
-                            minHeight: '42px',
-                            borderColor: state.isFocused ? '#3b82f6' : '#d1d5db',
-                            boxShadow: state.isFocused ? '0 0 0 1px #3b82f6' : 'none',
-                            '&:hover': {
-                              borderColor: state.isFocused ? '#3b82f6' : '#9ca3af'
-                            }
+                            minHeight: "42px",
+                            borderColor: state.isFocused
+                              ? "#3b82f6"
+                              : "#d1d5db",
+                            boxShadow: state.isFocused
+                              ? "0 0 0 1px #3b82f6"
+                              : "none",
+                            "&:hover": {
+                              borderColor: state.isFocused
+                                ? "#3b82f6"
+                                : "#9ca3af",
+                            },
                           }),
                           placeholder: (base) => ({
                             ...base,
-                            color: '#9ca3af'
-                          })
+                            color: "#9ca3af",
+                          }),
                         }}
                         required
                       />
                     </div>
-                    
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Quantity <span className="text-red-500">*</span>
@@ -892,7 +1001,9 @@ const OrderForm = () => {
                       <input
                         type="number"
                         value={item.qty}
-                        onChange={(e) => handleItemChange(index, 'qty', e.target.value)}
+                        onChange={(e) =>
+                          handleItemChange(index, "qty", e.target.value)
+                        }
                         onWheel={handleNumberInputWheel}
                         required
                         min="1"
@@ -902,72 +1013,73 @@ const OrderForm = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        FOB Price (per unit) <span className="text-gray-500 text-xs">(editable)</span>
+                        FOB Price (per unit){" "}
+                        <span className="text-gray-500 text-xs">
+                          (editable)
+                        </span>
                       </label>
                       <input
                         type="number"
                         step="0.01"
-                        value={item.fob || ''}
-                        onChange={(e) => handleItemChange(index, 'fob', e.target.value)}
+                        value={item.fob || ""}
+                        onChange={(e) =>
+                          handleItemChange(index, "fob", e.target.value)
+                        }
                         onWheel={handleNumberInputWheel}
                         className="input-field"
-                        placeholder={selectedProduct ? `Default: ${selectedProduct.fob_price || 0}` : "Enter FOB price"}
+                        placeholder={
+                          selectedProduct
+                            ? `Default: ${selectedProduct.fob_price || 0}`
+                            : "Enter FOB price"
+                        }
                       />
                       {selectedProduct && (
                         <p className="text-xs text-gray-500 mt-1">
-                          Master price: {formatCurrency(selectedProduct.fob_price, orderData.currency || 'USD')}
+                          Master price:{" "}
+                          {formatCurrency(
+                            selectedProduct.fob_price,
+                            orderData.currency || "USD"
+                          )}
                         </p>
                       )}
                     </div>
                   </div>
-                  
-                  {/* Discount fields for special template */}
-                  {orderData.template_type === 'special' && selectedProduct && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Discount 5% <span className="text-gray-500 text-xs">(auto-calculated)</span>
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={item.discount_5 || ''}
-                          onChange={(e) => handleItemChange(index, 'discount_5', e.target.value)}
-                          onWheel={handleNumberInputWheel}
-                          className="input-field"
-                          placeholder="Auto: 5% of FOB"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                          {item.fob ? `Auto: ${formatCurrency((parseFloat(item.fob) || 0) * 0.05, orderData.currency || 'USD')}` : 'Enter FOB price first'}
+
+                  {/* Discount dropdown for special template */}
+                  {orderData.template_type === "special" && selectedProduct && (
+                    <div className="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Discount
+                      </label>
+                      <select
+                        value={item.discount_5 || 0}
+                        onChange={(e) =>
+                          handleItemChange(
+                            index,
+                            "discount_5",
+                            parseInt(e.target.value) || 0
+                          )
+                        }
+                        className="input-field"
+                      >
+                        <option value={0}>No discount</option>
+                        <option value={5}>5% (Price × 0.95)</option>
+                        <option value={10}>10% (Price × 0.90)</option>
+                      </select>
+                      {item.fob && item.discount_5 > 0 && (
+                        <p className="text-xs text-gray-600 mt-2">
+                          <span className="font-semibold">
+                            Final FOB Price:{" "}
+                          </span>
+                          {formatCurrency(
+                            item.discount_5 === 5
+                              ? (parseFloat(item.fob) || 0) * 0.95
+                              : item.discount_5 === 10
+                              ? (parseFloat(item.fob) || 0) * 0.90
+                              : parseFloat(item.fob) || 0,
+                            orderData.currency || "USD"
+                          )}
                         </p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Discount 10% <span className="text-gray-500 text-xs">(auto-calculated)</span>
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={item.discount_10 || ''}
-                          onChange={(e) => handleItemChange(index, 'discount_10', e.target.value)}
-                          onWheel={handleNumberInputWheel}
-                          className="input-field"
-                          placeholder="Auto: 10% of FOB"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                          {item.fob ? `Auto: ${formatCurrency((parseFloat(item.fob) || 0) * 0.10, orderData.currency || 'USD')}` : 'Enter FOB price first'}
-                        </p>
-                      </div>
-                      {item.fob && (item.discount_5 || item.discount_10) && (
-                        <div className="md:col-span-2">
-                          <p className="text-xs text-gray-600 mt-2">
-                            <span className="font-semibold">Final FOB after discounts:</span>{' '}
-                            {formatCurrency(
-                              (parseFloat(item.fob) || 0) - (parseFloat(item.discount_5) || 0) - (parseFloat(item.discount_10) || 0),
-                              orderData.currency || 'USD'
-                            )}
-                          </p>
-                        </div>
                       )}
                     </div>
                   )}
@@ -978,7 +1090,7 @@ const OrderForm = () => {
                       <div className="flex items-start space-x-4">
                         <div className="flex-shrink-0">
                           {selectedProduct.picture_url ? (
-                            <img 
+                            <img
                               src={`https://api-inventory.isavralabel.com/kayu-manis-properti${selectedProduct.picture_url}`}
                               alt={selectedProduct.description}
                               className="h-16 w-16 object-cover rounded-lg border border-gray-200"
@@ -989,67 +1101,98 @@ const OrderForm = () => {
                             </div>
                           )}
                         </div>
-                        
+
                         <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                           <div>
                             <span className="text-gray-500">Client Code:</span>
                             <div className="font-medium">
-                              {selectedProduct.client_code || '-'}
+                              {selectedProduct.client_code || "-"}
                             </div>
                           </div>
                           <div>
                             <span className="text-gray-500">Size:</span>
                             <div className="font-medium">
-                              {selectedProduct.size_width}×{selectedProduct.size_depth}×{selectedProduct.size_height}
+                              {selectedProduct.size_width}×
+                              {selectedProduct.size_depth}×
+                              {selectedProduct.size_height}
                             </div>
                           </div>
                           <div>
                             <span className="text-gray-500">CBM:</span>
-                            <div className="font-medium">{selectedProduct.cbm}</div>
+                            <div className="font-medium">
+                              {selectedProduct.cbm}
+                            </div>
                           </div>
                           <div>
                             <span className="text-gray-500">FOB Price:</span>
                             <div className="font-medium">
-                              {item.fob && parseFloat(item.fob) !== parseFloat(selectedProduct.fob_price || 0) ? (
+                              {item.fob &&
+                              parseFloat(item.fob) !==
+                                parseFloat(selectedProduct.fob_price || 0) ? (
                                 <span>
-                                  <span className="text-blue-600">{formatCurrency(item.fob, orderData.currency || 'USD')}</span>
-                                  <span className="text-xs text-gray-400 ml-1">(custom)</span>
+                                  <span className="text-blue-600">
+                                    {formatCurrency(
+                                      item.fob,
+                                      orderData.currency || "USD"
+                                    )}
+                                  </span>
+                                  <span className="text-xs text-gray-400 ml-1">
+                                    (custom)
+                                  </span>
                                 </span>
                               ) : (
-                                formatCurrency(selectedProduct.fob_price, orderData.currency || 'USD')
-                              )} {orderData.currency || 'USD'}
+                                formatCurrency(
+                                  selectedProduct.fob_price,
+                                  orderData.currency || "USD"
+                                )
+                              )}{" "}
+                              {orderData.currency || "USD"}
                             </div>
                           </div>
                           <div>
                             <span className="text-gray-500">Color:</span>
-                            <div className="font-medium">{selectedProduct.color}</div>
+                            <div className="font-medium">
+                              {selectedProduct.color}
+                            </div>
                           </div>
                         </div>
                       </div>
-                      
+
                       {/* Calculated Totals */}
                       <div className="mt-3 pt-3 border-t border-gray-200 grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                         <div>
                           <span className="text-gray-500">Total CBM:</span>
-                          <div className="font-medium text-primary-600">{item.cbm_total}</div>
+                          <div className="font-medium text-primary-600">
+                            {item.cbm_total}
+                          </div>
                         </div>
                         <div>
                           <span className="text-gray-500">Total FOB:</span>
                           <div className="font-medium text-primary-600">
-                            {formatCurrency(item.fob_total_usd, orderData.currency || 'USD')} {orderData.currency || 'USD'}
+                            {formatCurrency(
+                              item.fob_total_usd,
+                              orderData.currency || "USD"
+                            )}{" "}
+                            {orderData.currency || "USD"}
                           </div>
                         </div>
                         <div>
                           <span className="text-gray-500">Gross Weight:</span>
-                          <div className="font-medium text-gray-900">{item.gross_weight_total} kg</div>
+                          <div className="font-medium text-gray-900">
+                            {item.gross_weight_total} kg
+                          </div>
                         </div>
                         <div>
                           <span className="text-gray-500">Net Weight:</span>
-                          <div className="font-medium text-gray-900">{item.net_weight_total} kg</div>
+                          <div className="font-medium text-gray-900">
+                            {item.net_weight_total} kg
+                          </div>
                         </div>
                         <div>
                           <span className="text-gray-500">Total GW:</span>
-                          <div className="font-medium text-gray-900">{item.total_gw_total} kg</div>
+                          <div className="font-medium text-gray-900">
+                            {item.total_gw_total} kg
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1058,22 +1201,34 @@ const OrderForm = () => {
                   {/* Custom Columns Input */}
                   {orderData.custom_columns.length > 0 && (
                     <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Kolom Kustom</h4>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">
+                        Kolom Kustom
+                      </h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {orderData.custom_columns.map((columnName, colIndex) => (
-                          <div key={colIndex}>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              {columnName || `Kolom ${colIndex + 1}`}
-                            </label>
-                            <input
-                              type="text"
-                              value={item.custom_column_values?.[columnName] || ''}
-                              onChange={(e) => handleCustomColumnValueChange(index, columnName, e.target.value)}
-                              className="input-field"
-                              placeholder={`Masukan ${columnName || 'nilai'}`}
-                            />
-                          </div>
-                        ))}
+                        {orderData.custom_columns.map(
+                          (columnName, colIndex) => (
+                            <div key={colIndex}>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {columnName || `Kolom ${colIndex + 1}`}
+                              </label>
+                              <input
+                                type="text"
+                                value={
+                                  item.custom_column_values?.[columnName] || ""
+                                }
+                                onChange={(e) =>
+                                  handleCustomColumnValueChange(
+                                    index,
+                                    columnName,
+                                    e.target.value
+                                  )
+                                }
+                                className="input-field"
+                                placeholder={`Masukan ${columnName || "nilai"}`}
+                              />
+                            </div>
+                          )
+                        )}
                       </div>
                     </div>
                   )}
@@ -1081,32 +1236,51 @@ const OrderForm = () => {
               );
             })}
           </div>
+
+          <div className="flex justify-end mt-5">
+            <button type="button" onClick={addItem} className="btn-primary">
+              <Plus className="w-4 h-4" />
+              Add Item
+            </button> 
+          </div>
         </div>
 
         {/* Order Summary */}
         <div className="card bg-gradient-to-br from-primary-50 to-secondary-50 border-primary-200">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Order Summary</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            Order Summary
+          </h2>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="text-center">
-              <div className="text-2xl font-bold text-primary-600">{totals.totalCBM.toFixed(2)}</div>
+              <div className="text-2xl font-bold text-primary-600">
+                {totals.totalCBM.toFixed(2)}
+              </div>
               <div className="text-sm text-gray-600">Total CBM</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-green-600">
-                {formatCurrency(totals.totalUSD, totals.currency || 'USD')}
+                {formatCurrency(totals.totalUSD, totals.currency || "USD")}
               </div>
-              <div className="text-sm text-gray-600">Total {totals.currency || 'USD'}</div>
+              <div className="text-sm text-gray-600">
+                Total {totals.currency || "USD"}
+              </div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900">{totals.totalGrossWeight.toFixed(2)}</div>
+              <div className="text-2xl font-bold text-gray-900">
+                {totals.totalGrossWeight.toFixed(2)}
+              </div>
               <div className="text-sm text-gray-600">Gross Weight (kg)</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900">{totals.totalNetWeight.toFixed(2)}</div>
+              <div className="text-2xl font-bold text-gray-900">
+                {totals.totalNetWeight.toFixed(2)}
+              </div>
               <div className="text-sm text-gray-600">Net Weight (kg)</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900">{totals.totalGW.toFixed(2)}</div>
+              <div className="text-2xl font-bold text-gray-900">
+                {totals.totalGW.toFixed(2)}
+              </div>
               <div className="text-sm text-gray-600">Total GW (kg)</div>
             </div>
           </div>
@@ -1116,26 +1290,20 @@ const OrderForm = () => {
         <div className="flex justify-end space-x-4 pt-6">
           <button
             type="button"
-            onClick={() => navigate('/app/orders')}
+            onClick={() => navigate("/app/orders")}
             className="btn-secondary"
             disabled={saving}
           >
             Cancel
           </button>
-          <button
-            type="submit"
-            className="btn-primary"
-            disabled={saving}
-          >
+          <button type="submit" className="btn-primary" disabled={saving}>
             {saving ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
                 Saving...
               </>
             ) : (
-              <>
-                {isEdit ? 'Update Order' : 'Create Order'}
-              </>
+              <>{isEdit ? "Update Order" : "Create Order"}</>
             )}
           </button>
         </div>

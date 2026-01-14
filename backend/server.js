@@ -144,8 +144,19 @@ app.get('/api/products', async (req, res) => {
 // Get products for select dropdown (MUST be before /api/products/:id route)
 app.get('/api/products/select', async (req, res) => {
   try {
+    const search = req.query.search || '';
+    
+    let whereClause = '';
+    let queryParams = [];
+
+    if (search) {
+      whereClause = 'WHERE (p.km_code LIKE ? OR p.description LIKE ? OR p.client_code LIKE ?)';
+      queryParams = [`%${search}%`, `%${search}%`, `%${search}%`];
+    }
+
     const [products] = await db.execute(
-      'SELECT p.id, p.client_code, p.client_barcode, p.client_description, p.km_code, p.description, p.cbm, p.fob_price, p.gross_weight, p.net_weight, p.total_gw, p.total_nw, p.picture_url, p.size_width, p.size_depth, p.size_height, p.packing_width, p.packing_depth, p.packing_height, p.color, p.folder_id, f.name as folder_name FROM products p LEFT JOIN product_folders f ON p.folder_id = f.id ORDER BY p.km_code'
+      `SELECT p.id, p.client_code, p.client_barcode, p.client_description, p.km_code, p.description, p.cbm, p.fob_price, p.gross_weight, p.net_weight, p.total_gw, p.total_nw, p.picture_url, p.size_width, p.size_depth, p.size_height, p.packing_width, p.packing_depth, p.packing_height, p.color, p.folder_id, f.name as folder_name FROM products p LEFT JOIN product_folders f ON p.folder_id = f.id ${whereClause} ORDER BY p.km_code LIMIT 100`,
+      queryParams
     );
 
     res.json({ products });
