@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ArrowLeft, Upload, X } from 'lucide-react';
 import Select from 'react-select';
 import CreatableSelect from 'react-select/creatable';
@@ -9,8 +9,20 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 
 const ProductForm = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams();
   const isEdit = Boolean(id);
+
+  const getProductsListPath = () => {
+    const q = location.state?.returnToListQuery;
+    if (!q) return '/app/products';
+    const params = new URLSearchParams();
+    if (q.page) params.set('page', String(q.page));
+    if (q.folder) params.set('folder', q.folder);
+    if (q.search) params.set('search', q.search);
+    const query = params.toString();
+    return `/app/products${query ? `?${query}` : ''}`;
+  };
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -42,57 +54,72 @@ const ProductForm = () => {
     hs_code: ''
   });
 
+  const applyProductToForm = useCallback((product) => {
+    let calculatedCBM = '';
+    if (product.packing_width && product.packing_depth && product.packing_height) {
+      const width = parseFloat(product.packing_width) || 0;
+      const depth = parseFloat(product.packing_depth) || 0;
+      const height = parseFloat(product.packing_height) || 0;
+      if (width > 0 && depth > 0 && height > 0) {
+        calculatedCBM = ((width * depth * height) / 1000000).toFixed(4);
+      }
+    }
+    setFormData({
+      client_code: product.client_code || '',
+      client_barcode: product.client_barcode || '',
+      client_description: product.client_description || '',
+      km_code: product.km_code || '',
+      description: product.description || '',
+      folder_id: product.folder_id || '',
+      picture: null,
+      size_width: product.size_width || '',
+      size_depth: product.size_depth || '',
+      size_height: product.size_height || '',
+      packing_width: product.packing_width || '',
+      packing_depth: product.packing_depth || '',
+      packing_height: product.packing_height || '',
+      cbm: calculatedCBM || product.cbm || '',
+      color: product.color || '',
+      gross_weight: product.gross_weight || '',
+      net_weight: product.net_weight || '',
+      total_gw: product.gross_weight || product.total_gw || '',
+      total_nw: product.net_weight || product.total_nw || '',
+      fob_price: product.fob_price || '',
+      total_price: product.fob_price || product.total_price || '',
+      hs_code: product.hs_code || ''
+    });
+    if (product.picture_url) {
+      setImagePreview(`https://api-inventory.isavralabel.com/kayu-manis-properti${product.picture_url}`);
+    } else {
+      setImagePreview(null);
+    }
+  }, []);
+
   const loadProduct = useCallback(async () => {
     try {
       setLoading(true);
       const product = await productsAPI.getProduct(id);
-      
-      // Calculate CBM from packing dimensions
-      let calculatedCBM = '';
-      if (product.packing_width && product.packing_depth && product.packing_height) {
-        const width = parseFloat(product.packing_width) || 0;
-        const depth = parseFloat(product.packing_depth) || 0;
-        const height = parseFloat(product.packing_height) || 0;
-        if (width > 0 && depth > 0 && height > 0) {
-          calculatedCBM = ((width * depth * height) / 1000000).toFixed(4);
-        }
-      }
-
-      setFormData({
-        client_code: product.client_code || '',
-        client_barcode: product.client_barcode || '',
-        client_description: product.client_description || '',
-        km_code: product.km_code || '',
-        description: product.description || '',
-        folder_id: product.folder_id || '',
-        picture: null,
-        size_width: product.size_width || '',
-        size_depth: product.size_depth || '',
-        size_height: product.size_height || '',
-        packing_width: product.packing_width || '',
-        packing_depth: product.packing_depth || '',
-        packing_height: product.packing_height || '',
-        cbm: calculatedCBM || product.cbm || '',
-        color: product.color || '',
-        gross_weight: product.gross_weight || '',
-        net_weight: product.net_weight || '',
-        total_gw: product.gross_weight || product.total_gw || '',
-        total_nw: product.net_weight || product.total_nw || '',
-        fob_price: product.fob_price || '',
-        total_price: product.fob_price || product.total_price || '',
-        hs_code: product.hs_code || ''
-      });
-      
-      if (product.picture_url) {
-        setImagePreview(`https://api-inventory.isavralabel.com/kayu-manis-properti${product.picture_url}`);
-      }
+      applyProductToForm(product);
     } catch (error) {
       console.error('Error loading product:', error);
       alert('Error loading product');
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, applyProductToForm]);
+
+  const loadProductForCopy = useCallback(async (copyFromId) => {
+    try {
+      setLoading(true);
+      const product = await productsAPI.getProduct(copyFromId);
+      applyProductToForm(product);
+    } catch (error) {
+      console.error('Error loading product for copy:', error);
+      alert('Error loading product for copy');
+    } finally {
+      setLoading(false);
+    }
+  }, [applyProductToForm]);
 
   const loadFolders = useCallback(async () => {
     try {
@@ -110,8 +137,10 @@ const ProductForm = () => {
   useEffect(() => {
     if (isEdit) {
       loadProduct();
+    } else if (location.state?.copyFromProductId) {
+      loadProductForCopy(location.state.copyFromProductId);
     }
-  }, [isEdit, loadProduct]);
+  }, [isEdit, loadProduct, location.state?.copyFromProductId, loadProductForCopy]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -196,7 +225,7 @@ const ProductForm = () => {
         await productsAPI.createProduct(formData);
       }
       
-      navigate('/app/products');
+      navigate(getProductsListPath());
     } catch (error) {
       console.error('Error saving product:', error);
       alert('Error saving product');
@@ -287,15 +316,17 @@ const ProductForm = () => {
       {/* Header */}
       <div className="flex items-center space-x-4">
         <button 
-          onClick={() => navigate('/app/products')}
+          onClick={() => navigate(getProductsListPath())}
           className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
-          <h1 className="page-title">{isEdit ? 'Edit Product' : 'Add New Product'}</h1>
+          <h1 className="page-title">
+            {isEdit ? 'Edit Product' : location.state?.copyFromProductId ? 'Copy Product' : 'Add New Product'}
+          </h1>
           <p className="page-subtitle">
-            {isEdit ? 'Update product information' : 'Add a new furniture product to your catalog'}
+            {isEdit ? 'Update product information' : location.state?.copyFromProductId ? 'Create a new product with the same details' : 'Add a new furniture product to your catalog'}
           </p>
         </div>
       </div>
@@ -468,7 +499,7 @@ const ProductForm = () => {
         <div className="flex justify-end space-x-4 pt-6">
           <button
             type="button"
-            onClick={() => navigate('/app/products')}
+            onClick={() => navigate(getProductsListPath())}
             className="btn-secondary"
             disabled={saving}
           >

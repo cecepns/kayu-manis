@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, X } from 'lucide-react';
 
-const SearchBar = ({ onSearch, placeholder = 'Search...', className = '' }) => {
-  const [searchTerm, setSearchTerm] = useState('');
+const SearchBar = ({ onSearch, placeholder = 'Search...', className = '', initialValue = '' }) => {
+  const [searchTerm, setSearchTerm] = useState(initialValue);
   const debounceTimerRef = useRef(null);
   const isFirstRender = useRef(true);
   const onSearchRef = useRef(onSearch);
@@ -11,6 +11,11 @@ const SearchBar = ({ onSearch, placeholder = 'Search...', className = '' }) => {
   useEffect(() => {
     onSearchRef.current = onSearch;
   }, [onSearch]);
+
+  // Sync when initialValue changes (e.g. when returning from edit with URL params)
+  useEffect(() => {
+    setSearchTerm((prev) => (initialValue !== undefined && initialValue !== prev ? initialValue : prev));
+  }, [initialValue]);
 
   // Debounce search - call onSearch after user stops typing
   useEffect(() => {

@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
-import { Plus, PencilIcon, Trash2, Package, Folder, Download, QrCode } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Plus, PencilIcon, Trash2, Package, Folder, Download, QrCode, Copy } from 'lucide-react';
 import QRCode from 'qrcode';
 import { productsAPI } from '../../utils/apiProducts';
 import { foldersAPI } from '../../utils/apiFolders';
@@ -9,18 +9,44 @@ import Pagination from '../../components/common/Pagination';
 import SearchBar from '../../components/common/SearchBar';
 
 const ProductList = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const currentPage = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+  const selectedFolderId = searchParams.get('folder') || '';
+  const searchTerm = searchParams.get('search') || '';
+
   const [products, setProducts] = useState([]);
   const [folders, setFolders] = useState([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedFolderId, setSelectedFolderId] = useState('');
   const itemsPerPage = 10;
   const previousSearchTermRef = useRef(searchTerm);
   const isFirstLoad = useRef(true);
+
+  const setCurrentPage = useCallback((page) => {
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev);
+      p.set('page', String(Math.max(1, page)));
+      return p;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  const setSelectedFolderId = useCallback((folderId) => {
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev);
+      if (folderId) p.set('folder', folderId);
+      else p.delete('folder');
+      p.set('page', '1');
+      return p;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  const returnToListQuery = useMemo(() => ({
+    page: currentPage,
+    folder: selectedFolderId || undefined,
+    search: searchTerm || undefined
+  }), [currentPage, selectedFolderId, searchTerm]);
 
   const loadFolders = useCallback(async () => {
     try {
@@ -89,16 +115,19 @@ const ProductList = () => {
   };
 
   const handleSearch = useCallback((search) => {
-    // Only update if search term actually changed
     const trimmedSearch = search.trim();
     const trimmedPrevious = (previousSearchTermRef.current || '').trim();
-    
     if (trimmedSearch !== trimmedPrevious) {
       previousSearchTermRef.current = search;
-      setSearchTerm(search);
-      setCurrentPage(1);
+      setSearchParams((prev) => {
+        const p = new URLSearchParams(prev);
+        if (search.trim()) p.set('search', search.trim());
+        else p.delete('search');
+        p.set('page', '1');
+        return p;
+      }, { replace: true });
     }
-  }, []);
+  }, [setSearchParams]);
 
   const handleDownloadQRCode = async (productId) => {
     try {
@@ -155,13 +184,11 @@ const ProductList = () => {
             onSearch={handleSearch}
             placeholder="Search products by KM Code, description..."
             className="flex-1"
+            initialValue={searchTerm}
           />
           <select
             value={selectedFolderId}
-            onChange={(e) => {
-              setSelectedFolderId(e.target.value);
-              setCurrentPage(1);
-            }}
+            onChange={(e) => setSelectedFolderId(e.target.value)}
             className="input-field sm:w-48"
           >
             <option value="">All Folders</option>
@@ -292,7 +319,16 @@ const ProductList = () => {
                       </td>
                       <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
                         <Link 
+                          to="/app/products/new"
+                          state={{ copyFromProductId: product.id, returnToListQuery }}
+                          className="text-gray-600 hover:text-gray-900 inline-flex items-center p-1"
+                          title="Copy"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </Link>
+                        <Link 
                           to={`/app/products/${product.id}/edit`}
+                          state={{ returnToListQuery }}
                           className="text-primary-600 hover:text-primary-900 inline-flex items-center p-1"
                           title="Edit"
                         >
@@ -386,7 +422,16 @@ const ProductList = () => {
                           <QrCode className="w-4 h-4" />
                         </button>
                         <Link 
+                          to="/app/products/new"
+                          state={{ copyFromProductId: product.id, returnToListQuery }}
+                          className="text-gray-600 hover:text-gray-900 p-1"
+                          title="Copy"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </Link>
+                        <Link 
                           to={`/app/products/${product.id}/edit`}
+                          state={{ returnToListQuery }}
                           className="text-primary-600 hover:text-primary-900 p-1"
                           title="Edit"
                         >
