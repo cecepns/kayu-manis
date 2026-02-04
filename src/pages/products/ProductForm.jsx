@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Upload, X } from 'lucide-react';
 import Select from 'react-select';
+import CreatableSelect from 'react-select/creatable';
 import { productsAPI } from '../../utils/apiProducts';
 import { foldersAPI } from '../../utils/apiFolders';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
@@ -276,7 +277,7 @@ const ProductForm = () => {
     {
       title: 'Additional Information',
       fields: [
-        { label: 'HS Code', name: 'hs_code', type: 'select', isReactSelect: true, options: HS_CODE_OPTIONS }
+        { label: 'HS Code', name: 'hs_code', type: 'select', isReactSelect: true, isCreatable: true, options: HS_CODE_OPTIONS }
       ]
     }
   ];
@@ -370,26 +371,54 @@ const ProductForm = () => {
                       />
                     ) : field.type === 'select' ? (
                       field.isReactSelect ? (
-                        <Select
-                          id={field.name}
-                          name={field.name}
-                          value={
-                            field.options.find(
-                              (option) => option.value === formData[field.name]
-                            ) || null
-                          }
-                          onChange={(selectedOption) =>
-                            setFormData((prev) => ({
-                              ...prev,
-                              [field.name]: selectedOption ? selectedOption.value : ''
-                            }))
-                          }
-                          options={field.options}
-                          isClearable
-                          className="react-select-container"
-                          classNamePrefix="react-select"
-                          placeholder={`Select ${field.label.toLowerCase()}`}
-                        />
+                        field.isCreatable ? (
+                          <CreatableSelect
+                            id={field.name}
+                            name={field.name}
+                            value={
+                              formData[field.name]
+                                ? field.options.find(
+                                    (opt) => opt.value === formData[field.name]
+                                  ) || {
+                                    value: formData[field.name],
+                                    label: formData[field.name]
+                                  }
+                                : null
+                            }
+                            onChange={(selectedOption) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                [field.name]: selectedOption ? selectedOption.value : ''
+                              }))
+                            }
+                            options={field.options}
+                            isClearable
+                            className="react-select-container"
+                            classNamePrefix="react-select"
+                            placeholder={`Select or type ${field.label.toLowerCase()}`}
+                          />
+                        ) : (
+                          <Select
+                            id={field.name}
+                            name={field.name}
+                            value={
+                              field.options.find(
+                                (option) => option.value === formData[field.name]
+                              ) || null
+                            }
+                            onChange={(selectedOption) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                [field.name]: selectedOption ? selectedOption.value : ''
+                              }))
+                            }
+                            options={field.options}
+                            isClearable
+                            className="react-select-container"
+                            classNamePrefix="react-select"
+                            placeholder={`Select ${field.label.toLowerCase()}`}
+                          />
+                        )
                       ) : (
                         <select
                           id={field.name}

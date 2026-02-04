@@ -153,6 +153,11 @@ const ReportDetail = () => {
         const num = typeof value === "string" ? parseFloat(value) : Number(value);
         return isNaN(num) ? null : num;
       };
+      // Round to 2 decimal places for currency/totals
+      const roundTo2 = (value) => {
+        const n = toNumber(value);
+        return n != null ? Number(parseFloat(n).toFixed(2)) : null;
+      };
 
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Packing List");
@@ -692,7 +697,7 @@ const ReportDetail = () => {
             return toNumber(priceAfterDiscount);
           })()
         ] : []),
-        toNumber(item.fob_total_usd || item.fob_total), // Total - number
+        roundTo2(item.fob_total_usd || item.fob_total), // Total - number (2 decimals)
         item.hs_code || "",
         ...customColumns.map((col) => {
           const val = customValues[col];
@@ -807,7 +812,7 @@ const ReportDetail = () => {
     }
 
     // Leave FOB and Price After Discount blank in summary, only set overall total amount
-    safeSet(summaryValues, totalColIndex, toNumber(summary.totalUSD)); // Total amount - number
+    safeSet(summaryValues, totalColIndex, roundTo2(summary.totalUSD)); // Total amount - number (2 decimals)
 
     const summaryRow = worksheet.addRow(summaryValues);
 
@@ -1294,7 +1299,13 @@ const ReportDetail = () => {
                       </td>
                     )}
                     <td className="border border-gray-300 px-2 py-2 text-center font-medium">
-                      <div>{item.fob_total_usd || item.fob_total || "-"}</div>
+                      <div>
+                        {item.fob_total_usd != null || item.fob_total != null
+                          ? parseFloat(
+                              item.fob_total_usd ?? item.fob_total ?? 0
+                            ).toFixed(2)
+                          : "-"}
+                      </div>
                     </td>
                     <td className="border border-gray-300 px-2 py-2 text-center">
                       {item.hs_code}
@@ -1354,7 +1365,9 @@ const ReportDetail = () => {
                     </td>
                   )}
                   <td className="border border-gray-300 px-2 py-2 text-center text-green-600">
-                    <div>{summary.totalUSD}</div>
+                    <div>
+                      {parseFloat(summary.totalUSD ?? 0).toFixed(2)}
+                    </div>
                   </td>
                   <td className="border border-gray-300 px-2 py-2 text-center">
                     -

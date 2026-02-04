@@ -232,13 +232,14 @@ const OrderForm = () => {
         }
       }
 
-      // Calculate final FOB price after discount (multiply by multiplier)
+      // Calculate final FOB price after discount (multiply by multiplier), round to 2 decimals
+      const round2 = (n) => Math.round(n * 100) / 100;
       let finalFobPrice = fobPrice;
       if (orderData.template_type === "special") {
         if (discountType === 5) {
-          finalFobPrice = fobPrice * 0.95;
+          finalFobPrice = round2(fobPrice * 0.95);
         } else if (discountType === 10) {
-          finalFobPrice = fobPrice * 0.90;
+          finalFobPrice = round2(fobPrice * 0.90);
         } else {
           finalFobPrice = fobPrice * 1.0; // No discount
         }
@@ -340,13 +341,14 @@ const OrderForm = () => {
           }
         }
 
-        // Calculate final FOB price after discount (multiply by multiplier)
+        // Calculate final FOB price after discount (multiply by multiplier), round to 2 decimals
+        const round2 = (n) => Math.round(n * 100) / 100;
         let finalFobPrice = baseFobPrice;
         if (orderData.template_type === "special") {
           if (discountType === 5) {
-            finalFobPrice = baseFobPrice * 0.95;
+            finalFobPrice = round2(baseFobPrice * 0.95);
           } else if (discountType === 10) {
-            finalFobPrice = baseFobPrice * 0.90;
+            finalFobPrice = round2(baseFobPrice * 0.90);
           } else {
             finalFobPrice = baseFobPrice * 1.0; // No discount
           }
@@ -1074,11 +1076,17 @@ const OrderForm = () => {
                             Final FOB Price:{" "}
                           </span>
                           {formatCurrency(
-                            item.discount_5 === 5
-                              ? (parseFloat(item.fob) || 0) * 0.95
-                              : item.discount_5 === 10
-                              ? (parseFloat(item.fob) || 0) * 0.90
-                              : parseFloat(item.fob) || 0,
+                            (() => {
+                              const round2 = (n) => Math.round(n * 100) / 100;
+                              const base = parseFloat(item.fob) || 0;
+                              const price =
+                                item.discount_5 === 5
+                                  ? round2(base * 0.95)
+                                  : item.discount_5 === 10
+                                  ? round2(base * 0.90)
+                                  : base;
+                              return price;
+                            })(),
                             orderData.currency || "USD"
                           )}
                         </p>
@@ -1172,7 +1180,9 @@ const OrderForm = () => {
                           <span className="text-gray-500">Total FOB:</span>
                           <div className="font-medium text-primary-600">
                             {formatCurrency(
-                              item.fob_total_usd,
+                              Number(
+                                parseFloat(item.fob_total_usd || 0).toFixed(2)
+                              ),
                               orderData.currency || "USD"
                             )}{" "}
                             {orderData.currency || "USD"}
