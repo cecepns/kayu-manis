@@ -241,9 +241,11 @@ const OrderForm = () => {
         } else if (discountType === 10) {
           finalFobPrice = round2(fobPrice * 0.90);
         } else {
-          finalFobPrice = fobPrice * 1.0; // No discount
+          finalFobPrice = round2(fobPrice);
         }
         if (finalFobPrice < 0) finalFobPrice = 0;
+      } else {
+        finalFobPrice = round2(finalFobPrice);
       }
 
       if (product && qty > 0 && productId) {
@@ -287,7 +289,7 @@ const OrderForm = () => {
           product_id: productId,
           client_code: product.client_code || null,
           cbm_total: cbmTotalFormatted,
-          fob_total_usd: (finalFobPrice * qty).toFixed(2),
+          fob_total_usd: round2(finalFobPrice * qty).toFixed(2),
           gross_weight_total: (
             parseFloat(product.gross_weight || 0) * qty
           ).toFixed(2),
@@ -350,9 +352,11 @@ const OrderForm = () => {
           } else if (discountType === 10) {
             finalFobPrice = round2(baseFobPrice * 0.90);
           } else {
-            finalFobPrice = baseFobPrice * 1.0; // No discount
+            finalFobPrice = round2(baseFobPrice);
           }
           if (finalFobPrice < 0) finalFobPrice = 0;
+        } else {
+          finalFobPrice = round2(finalFobPrice);
         }
 
         updatedItems[index] = {
@@ -363,7 +367,7 @@ const OrderForm = () => {
               ? parseInt(fieldValue) || 0
               : updatedItems[index].discount_5,
           discount_10: null, // Not used anymore
-          fob_total_usd: (finalFobPrice * qty).toFixed(2),
+          fob_total_usd: round2(finalFobPrice * qty).toFixed(2),
         };
       }
     }
@@ -500,11 +504,14 @@ const OrderForm = () => {
   };
 
   const calculateTotals = () => {
+    const round2 = (n) => Math.round(n * 100) / 100;
     const totals = orderData.items.reduce(
       (acc, item) => {
         return {
           totalCBM: acc.totalCBM + parseFloat(item.cbm_total || 0),
-          totalUSD: acc.totalUSD + parseFloat(item.fob_total_usd || 0),
+          totalUSD: round2(
+            acc.totalUSD + parseFloat(item.fob_total_usd || 0)
+          ),
           totalGrossWeight:
             acc.totalGrossWeight + parseFloat(item.gross_weight_total || 0),
           totalNetWeight:
@@ -540,15 +547,20 @@ const OrderForm = () => {
     return symbols[currency] || currency || "$";
   };
 
-  const formatCurrency = (amount, currency) => {
+  const formatCurrency = (amount, currency, options = {}) => {
     const symbol = getCurrencySymbol(currency || "USD");
     const curr = currency || "USD";
+    const num = parseFloat(amount || 0);
+    let formatted = num.toFixed(2);
+    if (options.stripTrailingZeros) {
+      formatted = formatted.replace(/\.?0+$/, "");
+    }
 
     // Format berdasarkan currency
     if (curr === "Rp" || curr === "IDR") {
-      return `${symbol} ${parseFloat(amount || 0).toFixed(2)}`;
+      return `${symbol} ${formatted}`;
     } else {
-      return `${symbol}${parseFloat(amount || 0).toFixed(2)}`;
+      return `${symbol}${formatted}`;
     }
   };
 
@@ -1183,7 +1195,8 @@ const OrderForm = () => {
                               Number(
                                 parseFloat(item.fob_total_usd || 0).toFixed(2)
                               ),
-                              orderData.currency || "USD"
+                              orderData.currency || "USD",
+                              { stripTrailingZeros: true }
                             )}{" "}
                             {orderData.currency || "USD"}
                           </div>
@@ -1271,7 +1284,11 @@ const OrderForm = () => {
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-green-600">
-                {formatCurrency(totals.totalUSD, totals.currency || "USD")}
+                {formatCurrency(
+                  totals.totalUSD,
+                  totals.currency || "USD",
+                  { stripTrailingZeros: true }
+                )}
               </div>
               <div className="text-sm text-gray-600">
                 Total {totals.currency || "USD"}

@@ -46,16 +46,20 @@ const ReportDetail = () => {
     return symbols[currency] || currency || "$";
   };
 
-  const formatCurrency = (amount, currency) => {
+  const formatCurrency = (amount, currency, options = {}) => {
     const symbol = getCurrencySymbol(currency || "USD");
     const curr = currency || "USD";
     const parsed = parseFloat(amount);
     const safeValue = isNaN(parsed) ? 0 : parsed;
+    let formatted = safeValue.toFixed(2);
+    if (options.stripTrailingZeros) {
+      formatted = formatted.replace(/\.?0+$/, "");
+    }
 
     if (curr === "Rp" || curr === "IDR") {
-      return `${symbol} ${safeValue.toFixed(2)}`;
+      return `${symbol} ${formatted}`;
     } else {
-      return `${symbol}${safeValue.toFixed(2)}`;
+      return `${symbol}${formatted}`;
     }
   };
 
@@ -127,17 +131,43 @@ const ReportDetail = () => {
     return sum + (isNaN(qty) ? 0 : qty);
   }, 0);
 
-  // Helper to calculate price after discount per unit
+  // Total FOB from items with same rounding as OrderForm (avoid float drift)
+  const round2 = (n) => Math.round(n * 100) / 100;
+  const getItemFobTotalDisplay = (item) => {
+    const qty = parseFloat(item.qty) || 0;
+    let unit = parseFloat(item.fob ?? item.fob_price ?? 0);
+    if (isSpecialTemplate) {
+      const d = parseInt(item.discount_5) || 0;
+      if (d === 5) unit = round2(unit * 0.95);
+      else if (d === 10) unit = round2(unit * 0.9);
+      else unit = round2(unit);
+    } else {
+      unit = round2(unit);
+    }
+    return round2(unit * qty);
+  };
+  const computedTotalUSD = round2(
+    items.reduce(
+      (sum, item) =>
+        sum +
+        (item.fob != null || item.fob_price != null
+          ? getItemFobTotalDisplay(item)
+          : parseFloat(item.fob_total_usd ?? item.fob_total ?? 0)),
+      0
+    )
+  );
+
+  // Helper to calculate price after discount per unit (rounded to 2 decimals, same as OrderForm)
   const calculatePriceAfterDiscount = (item) => {
     if (!isSpecialTemplate) return null;
     const fobPrice = parseFloat(item.fob || item.fob_price || 0);
     const discountType = parseInt(item.discount_5) || 0;
     if (discountType === 5) {
-      return fobPrice * 0.95;
+      return round2(fobPrice * 0.95);
     } else if (discountType === 10) {
-      return fobPrice * 0.90;
+      return round2(fobPrice * 0.9);
     }
-    return fobPrice;
+    return round2(fobPrice);
   };
 
   const handleExportExcel = async () => {
@@ -157,6 +187,23 @@ const ReportDetail = () => {
       const roundTo2 = (value) => {
         const n = toNumber(value);
         return n != null ? Number(parseFloat(n).toFixed(2)) : null;
+      };
+      const round2Num = (n) =>
+        n != null && !isNaN(n) ? Math.round(Number(n) * 100) / 100 : 0;
+
+      // Item FOB total with same rounding as OrderForm (round unit price then round total)
+      const getItemFobTotal = (item) => {
+        const qty = parseFloat(item.qty) || 0;
+        let unit = parseFloat(item.fob || item.fob_price || 0);
+        if (isSpecialTemplate) {
+          const d = parseInt(item.discount_5) || 0;
+          if (d === 5) unit = round2Num(unit * 0.95);
+          else if (d === 10) unit = round2Num(unit * 0.9);
+          else unit = round2Num(unit);
+        } else {
+          unit = round2Num(unit);
+        }
+        return round2Num(unit * qty);
       };
 
       const workbook = new ExcelJS.Workbook();
@@ -690,14 +737,16 @@ const ReportDetail = () => {
             const discountType = parseInt(item.discount_5) || 0;
             let priceAfterDiscount = fobPrice;
             if (discountType === 5) {
-              priceAfterDiscount = fobPrice * 0.95;
+              priceAfterDiscount = round2Num(fobPrice * 0.95);
             } else if (discountType === 10) {
-              priceAfterDiscount = fobPrice * 0.90;
+              priceAfterDiscount = round2Num(fobPrice * 0.9);
+            } else {
+              priceAfterDiscount = round2Num(fobPrice);
             }
-            return toNumber(priceAfterDiscount);
+            return priceAfterDiscount;
           })()
         ] : []),
-        roundTo2(item.fob_total_usd || item.fob_total), // Total - number (2 decimals)
+        getItemFobTotal(item), // Total - same rounding as OrderForm
         item.hs_code || "",
         ...customColumns.map((col) => {
           const val = customValues[col];
@@ -811,8 +860,11 @@ const ReportDetail = () => {
       safeSet(summaryValues, grossWColIndex + 3, toNumber(summary.totalNW)); // Total NW - number
     }
 
-    // Leave FOB and Price After Discount blank in summary, only set overall total amount
-    safeSet(summaryValues, totalColIndex, roundTo2(summary.totalUSD)); // Total amount - number (2 decimals)
+    // Leave FOB and Price After Discount blank in summary; total = sum of item totals (same rounding as OrderForm)
+    const totalUSDExcel = round2Num(
+      items.reduce((s, it) => s + getItemFobTotal(it), 0)
+    );
+    safeSet(summaryValues, totalColIndex, totalUSDExcel);
 
     const summaryRow = worksheet.addRow(summaryValues);
 
@@ -1300,11 +1352,17 @@ const ReportDetail = () => {
                     )}
                     <td className="border border-gray-300 px-2 py-2 text-center font-medium">
                       <div>
-                        {item.fob_total_usd != null || item.fob_total != null
-                          ? parseFloat(
-                              item.fob_total_usd ?? item.fob_total ?? 0
-                            ).toFixed(2)
-                          : "-"}
+                        {item.fob != null || item.fob_price != null
+                          ? getItemFobTotalDisplay(item)
+                              .toFixed(2)
+                              .replace(/\.?0+$/, "")
+                          : item.fob_total_usd != null || item.fob_total != null
+                            ? parseFloat(
+                                item.fob_total_usd ?? item.fob_total ?? 0
+                              )
+                                .toFixed(2)
+                                .replace(/\.?0+$/, "")
+                            : "-"}
                       </div>
                     </td>
                     <td className="border border-gray-300 px-2 py-2 text-center">
@@ -1366,7 +1424,7 @@ const ReportDetail = () => {
                   )}
                   <td className="border border-gray-300 px-2 py-2 text-center text-green-600">
                     <div>
-                      {parseFloat(summary.totalUSD ?? 0).toFixed(2)}
+                      {Number(computedTotalUSD).toFixed(2).replace(/\.?0+$/, "")}
                     </div>
                   </td>
                   <td className="border border-gray-300 px-2 py-2 text-center">
@@ -1398,7 +1456,11 @@ const ReportDetail = () => {
           </div>
           <div className="text-center">
             <div className="text-lg font-bold text-green-600">
-              {formatCurrency(summary.totalUSD, displayCurrency)}
+              {formatCurrency(
+                computedTotalUSD,
+                displayCurrency,
+                { stripTrailingZeros: true }
+              )}
             </div>
             <div className="text-xs text-gray-600 uppercase tracking-wide">
               Total FOB {displayCurrency}
