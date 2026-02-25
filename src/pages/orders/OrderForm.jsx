@@ -1113,7 +1113,7 @@ const OrderForm = () => {
                         <div className="flex-shrink-0">
                           {selectedProduct.picture_url ? (
                             <img
-                              src={`https://api-inventory.isavralabel.com/kayu-manis-properti${selectedProduct.picture_url}`}
+                              src={`https://api-be.kayumanishomefurniture.com${selectedProduct.picture_url}`}
                               alt={selectedProduct.description}
                               className="h-16 w-16 object-cover rounded-lg border border-gray-200"
                             />

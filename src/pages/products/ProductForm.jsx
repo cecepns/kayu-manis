@@ -89,7 +89,7 @@ const ProductForm = () => {
       hs_code: product.hs_code || ''
     });
     if (product.picture_url) {
-      setImagePreview(`https://api-inventory.isavralabel.com/kayu-manis-properti${product.picture_url}`);
+      setImagePreview(`https://api-be.kayumanishomefurniture.com${product.picture_url}`);
     } else {
       setImagePreview(null);
     }

@@ -686,7 +686,7 @@ const ReportDetail = () => {
     }
 
     // Data rows with images
-    const baseUrlForImages = "https://api-inventory.isavralabel.com/kayu-manis-properti";
+    const baseUrlForImages = "https://api-be.kayumanishomefurniture.com";
     const pictureColumnIndex = 4 + (isSpecialTemplate ? 2 : 0); // "Picture" column (adjust for Client Barcode + Client Description if special template)
 
     setExportProgress({ current: 30, total: 100, message: "Processing items..." });
@@ -1281,7 +1281,7 @@ const ReportDetail = () => {
                     <td className="border border-gray-300 px-2 py-2 text-center">
                       {item.picture_url ? (
                         <img
-                          src={`https://api-inventory.isavralabel.com/kayu-manis-properti${item.picture_url}`}
+                          src={`https://api-be.kayumanishomefurniture.com${item.picture_url}`}
                           alt={item.description}
                           className="h-12 w-12 object-cover rounded mx-auto border border-gray-200"
                         />

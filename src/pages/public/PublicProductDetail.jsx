@@ -58,7 +58,7 @@ const PublicProductDetail = () => {
           <div className="w-full h-64 md:h-96 bg-gray-100 flex items-center justify-center p-8">
             {product.picture_url ? (
               <img
-                src={`https://api-inventory.isavralabel.com/kayu-manis-properti${product.picture_url}`}
+                src={`https://api-be.kayumanishomefurniture.com${product.picture_url}`}
                 alt={product.description || product.km_code}
                 className="h-full w-full object-contain rounded-lg"
               />

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'https://api-inventory.isavralabel.com/kayu-manis-properti/api';
+const API_URL = 'https://api-be.kayumanishomefurniture.com/api';
 
 const api = axios.create({
   baseURL: API_URL,
