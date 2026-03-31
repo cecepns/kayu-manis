@@ -422,8 +422,25 @@ const ProductForm = () => {
                                 [field.name]: selectedOption ? selectedOption.value : ''
                               }))
                             }
+                            onCreateOption={(inputValue) => {
+                              const manualValue = inputValue.trim();
+                              setFormData((prev) => ({
+                                ...prev,
+                                [field.name]: manualValue
+                              }));
+                            }}
                             options={field.options}
                             isClearable
+                            isSearchable
+                            createOptionPosition="first"
+                            formatCreateLabel={(inputValue) =>
+                              `Tambah HS Code: "${inputValue}"`
+                            }
+                            noOptionsMessage={({ inputValue }) =>
+                              inputValue
+                                ? 'Tidak ada HS Code, tekan Enter untuk tambah manual'
+                                : 'Tidak ada opsi HS Code'
+                            }
                             className="react-select-container"
                             classNamePrefix="react-select"
                             placeholder={`Select or type ${field.label.toLowerCase()}`}

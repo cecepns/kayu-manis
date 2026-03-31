@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Plus, Trash2, Package } from "lucide-react";
 import Select from "react-select";
@@ -15,7 +15,9 @@ const OrderForm = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [products, setProducts] = useState([]);
+  const [productOptions, setProductOptions] = useState([]);
   const [buyerOptions, setBuyerOptions] = useState([]);
+  const productSearchTimeoutRef = useRef(null);
   const buyerSearchTimeoutRef = useRef(null);
 
   const [orderData, setOrderData] = useState({
@@ -50,10 +52,26 @@ const OrderForm = () => {
     ],
   });
 
-  const loadProducts = useCallback(async () => {
+  const loadProducts = useCallback(async (search = "") => {
     try {
-      const response = await productsAPI.getProductsForSelect();
-      setProducts(response.products || []);
+      const response = await productsAPI.getProductsForSelect(search);
+      const fetchedProducts = response.products || [];
+
+      setProducts((prev) => {
+        const productMap = new Map(prev.map((product) => [product.id, product]));
+        fetchedProducts.forEach((product) => {
+          productMap.set(product.id, product);
+        });
+        return Array.from(productMap.values());
+      });
+
+      setProductOptions(
+        fetchedProducts.map((product) => ({
+          value: product.id.toString(),
+          label: `${product.client_code ? product.client_code + " - " : ""}${product.km_code} - ${product.description || ""}`,
+          product,
+        }))
+      );
     } catch (error) {
       console.error("Error loading products:", error);
     }
@@ -124,14 +142,27 @@ const OrderForm = () => {
     }
   }, [id, loadBuyers]);
 
-  // Transform products to react-select format
-  const productOptions = useMemo(() => {
-    return products.map((product) => ({
-      value: product.id.toString(),
-      label: `${product.client_code ? product.client_code + ' - ' : ''}${product.km_code} - ${product.description || ''}`,
-      product: product, // Keep full product object for easy access
-    }));
-  }, [products]);
+  const getProductOptionById = useCallback(
+    (productId) => {
+      if (!productId) return null;
+
+      const idAsString = productId.toString();
+      const optionFromSearch = productOptions.find(
+        (option) => option.value === idAsString
+      );
+      if (optionFromSearch) return optionFromSearch;
+
+      const product = products.find((p) => p.id === parseInt(productId));
+      if (!product) return null;
+
+      return {
+        value: product.id.toString(),
+        label: `${product.client_code ? product.client_code + " - " : ""}${product.km_code} - ${product.description || ""}`,
+        product,
+      };
+    },
+    [productOptions, products]
+  );
 
   useEffect(() => {
     loadProducts();
@@ -143,6 +174,17 @@ const OrderForm = () => {
       loadOrder();
     }
   }, [isEdit, id, loadOrder]);
+
+  useEffect(() => {
+    return () => {
+      if (productSearchTimeoutRef.current) {
+        clearTimeout(productSearchTimeoutRef.current);
+      }
+      if (buyerSearchTimeoutRef.current) {
+        clearTimeout(buyerSearchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleOrderInfoChange = (e) => {
     const { name, value } = e.target;
@@ -177,6 +219,18 @@ const OrderForm = () => {
       // Debounce search - load buyers when user types
       buyerSearchTimeoutRef.current = setTimeout(() => {
         loadBuyers(inputValue);
+      }, 300);
+    }
+  };
+
+  const handleProductInputChange = (inputValue, { action }) => {
+    if (action === "input-change") {
+      if (productSearchTimeoutRef.current) {
+        clearTimeout(productSearchTimeoutRef.current);
+      }
+
+      productSearchTimeoutRef.current = setTimeout(() => {
+        loadProducts(inputValue);
       }, 300);
     }
   };
@@ -969,17 +1023,13 @@ const OrderForm = () => {
                         Product <span className="text-red-500">*</span>
                       </label>
                       <Select
-                        value={
-                          productOptions.find(
-                            (option) =>
-                              option.value === item.product_id?.toString()
-                          ) || null
-                        }
+                        value={getProductOptionById(item.product_id)}
                         onChange={(selectedOption) =>
                           handleItemChange(index, "product_id", selectedOption)
                         }
+                        onInputChange={handleProductInputChange}
                         options={productOptions}
-                        placeholder="Select a product"
+                        placeholder="Search and select product"
                         isClearable
                         isSearchable
                         className="react-select-container"
