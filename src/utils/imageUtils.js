@@ -30,6 +30,52 @@ const api = axios.create({
   baseURL: `${API_BASE_URL}/api`,
 });
 
+const MIME_BY_EXTENSION = {
+  jpeg: 'image/jpeg',
+  jpg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+};
+
+/** Read intrinsic pixel size from base64 (browser). */
+export function getDimensionsFromBase64(base64, extension = 'jpeg') {
+  if (!base64) return Promise.resolve(null);
+  const mime = MIME_BY_EXTENSION[extension] || 'image/jpeg';
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      resolve({
+        width: img.naturalWidth || img.width,
+        height: img.naturalHeight || img.height,
+      });
+    };
+    img.onerror = () => resolve(null);
+    img.src = `data:${mime};base64,${base64}`;
+  });
+}
+
+/** Scale image to fit inside a box while preserving aspect ratio. */
+export function fitImageToBox(naturalWidth, naturalHeight, maxWidth, maxHeight) {
+  if (!naturalWidth || !naturalHeight || naturalWidth <= 0 || naturalHeight <= 0) {
+    const side = Math.min(maxWidth, maxHeight);
+    return { width: side, height: side };
+  }
+
+  const ratio = naturalWidth / naturalHeight;
+  let width = maxWidth;
+  let height = width / ratio;
+
+  if (height > maxHeight) {
+    height = maxHeight;
+    width = height * ratio;
+  }
+
+  return {
+    width: Math.round(width),
+    height: Math.round(height),
+  };
+}
+
 /**
  * Fetch image as base64 for Excel export via backend proxy (avoids CORS/canvas issues).
  */
@@ -41,9 +87,20 @@ export async function fetchImageForExcel(pictureUrl) {
     const response = await api.get('/images/base64', {
       params: { path: imagePath },
     });
-    const { base64, width, height, extension } = response.data;
+    let { base64, width, height, extension } = response.data;
     if (!base64) return null;
-    return { base64, width, height, extension: extension || 'jpeg' };
+
+    extension = extension || 'jpeg';
+
+    if (!width || !height) {
+      const dims = await getDimensionsFromBase64(base64, extension);
+      if (dims) {
+        width = dims.width;
+        height = dims.height;
+      }
+    }
+
+    return { base64, width, height, extension };
   } catch (error) {
     console.error('Error fetching image for Excel:', error, imagePath);
     return null;

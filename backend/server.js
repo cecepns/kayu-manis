@@ -4,6 +4,7 @@ const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const sizeOf = require('image-size');
 
 const app = express();
 const PORT = 3001;
@@ -39,11 +40,21 @@ app.get('/api/images/base64', async (req, res) => {
     else if (ext === '.gif') extension = 'gif';
     else if (ext === '.webp') extension = 'png';
 
+    let width = null;
+    let height = null;
+    try {
+      const dimensions = sizeOf(buffer);
+      width = dimensions.width ?? null;
+      height = dimensions.height ?? null;
+    } catch (dimErr) {
+      console.warn('Could not read image dimensions:', fullPath, dimErr.message);
+    }
+
     res.json({
       base64: buffer.toString('base64'),
       extension,
-      width: null,
-      height: null,
+      width,
+      height,
     });
   } catch (error) {
     console.error('Error reading image:', error);

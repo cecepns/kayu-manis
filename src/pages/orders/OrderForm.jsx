@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { ArrowLeft, Plus, Trash2, Package } from "lucide-react";
 import Select from "react-select";
+import CreatableSelect from "react-select/creatable";
 import { ordersAPI } from "../../utils/apiOrders";
 import { productsAPI } from "../../utils/apiProducts";
 import { buyersAPI } from "../../utils/apiBuyers";
 import LoadingSpinner from "../../components/common/LoadingSpinner";
-import CreatableSelectInput from "../../components/common/CreatableSelectInput";
 import {
   DEFAULT_TERMS_OF_PAYMENT,
   DEFAULT_DELIVERY_TERMS,
@@ -14,6 +14,35 @@ import {
   BANK_OPTIONS,
   DEFAULT_BANK_ID,
 } from "../../constants/reportDefaults";
+
+const toSelectOptions = (items) =>
+  items.map((item) => ({ value: item, label: item }));
+
+const TERMS_OF_PAYMENT_OPTIONS = toSelectOptions(DEFAULT_TERMS_OF_PAYMENT);
+const DELIVERY_TERMS_OPTIONS = toSelectOptions(DEFAULT_DELIVERY_TERMS);
+
+const reactSelectControlStyles = {
+  control: (base, state) => ({
+    ...base,
+    minHeight: "42px",
+    borderColor: state.isFocused ? "#3b82f6" : "#d1d5db",
+    boxShadow: state.isFocused ? "0 0 0 1px #3b82f6" : "none",
+    "&:hover": {
+      borderColor: state.isFocused ? "#3b82f6" : "#9ca3af",
+    },
+  }),
+  placeholder: (base) => ({
+    ...base,
+    color: "#9ca3af",
+  }),
+};
+
+const getCreatableSelectValue = (value, options) => {
+  if (!value) return null;
+  return (
+    options.find((opt) => opt.value === value) || { value, label: value }
+  );
+};
 
 const OrderForm = () => {
   const navigate = useNavigate();
@@ -1455,26 +1484,90 @@ const OrderForm = () => {
               <label htmlFor="terms_of_payment" className="block text-sm font-medium text-gray-700 mb-1">
                 Terms of Payment
               </label>
-              <CreatableSelectInput
+              <CreatableSelect
                 id="terms_of_payment"
-                name="terms_of_payment"
-                value={orderData.terms_of_payment}
-                onChange={handleOrderInfoChange}
-                options={DEFAULT_TERMS_OF_PAYMENT}
-                placeholder="Select or type custom terms"
+                inputId="terms_of_payment"
+                value={getCreatableSelectValue(
+                  orderData.terms_of_payment,
+                  TERMS_OF_PAYMENT_OPTIONS
+                )}
+                onChange={(selectedOption) =>
+                  setOrderData((prev) => ({
+                    ...prev,
+                    terms_of_payment: selectedOption
+                      ? selectedOption.value
+                      : "",
+                  }))
+                }
+                onCreateOption={(inputValue) => {
+                  const manualValue = inputValue.trim();
+                  if (!manualValue) return;
+                  setOrderData((prev) => ({
+                    ...prev,
+                    terms_of_payment: manualValue,
+                  }));
+                }}
+                options={TERMS_OF_PAYMENT_OPTIONS}
+                isClearable
+                isSearchable
+                createOptionPosition="first"
+                formatCreateLabel={(inputValue) =>
+                  `Tambah: "${inputValue}"`
+                }
+                noOptionsMessage={({ inputValue }) =>
+                  inputValue
+                    ? "Tekan Enter untuk tambah opsi manual"
+                    : "Tidak ada opsi"
+                }
+                className="react-select-container"
+                classNamePrefix="react-select"
+                placeholder="Pilih atau ketik terms of payment"
+                styles={reactSelectControlStyles}
               />
             </div>
             <div>
               <label htmlFor="delivery_terms" className="block text-sm font-medium text-gray-700 mb-1">
                 Delivery Terms
               </label>
-              <CreatableSelectInput
+              <CreatableSelect
                 id="delivery_terms"
-                name="delivery_terms"
-                value={orderData.delivery_terms}
-                onChange={handleOrderInfoChange}
-                options={DEFAULT_DELIVERY_TERMS}
-                placeholder="Select or type custom delivery terms"
+                inputId="delivery_terms"
+                value={getCreatableSelectValue(
+                  orderData.delivery_terms,
+                  DELIVERY_TERMS_OPTIONS
+                )}
+                onChange={(selectedOption) =>
+                  setOrderData((prev) => ({
+                    ...prev,
+                    delivery_terms: selectedOption
+                      ? selectedOption.value
+                      : "",
+                  }))
+                }
+                onCreateOption={(inputValue) => {
+                  const manualValue = inputValue.trim();
+                  if (!manualValue) return;
+                  setOrderData((prev) => ({
+                    ...prev,
+                    delivery_terms: manualValue,
+                  }));
+                }}
+                options={DELIVERY_TERMS_OPTIONS}
+                isClearable
+                isSearchable
+                createOptionPosition="first"
+                formatCreateLabel={(inputValue) =>
+                  `Tambah: "${inputValue}"`
+                }
+                noOptionsMessage={({ inputValue }) =>
+                  inputValue
+                    ? "Tekan Enter untuk tambah opsi manual"
+                    : "Tidak ada opsi"
+                }
+                className="react-select-container"
+                classNamePrefix="react-select"
+                placeholder="Pilih atau ketik delivery terms"
+                styles={reactSelectControlStyles}
               />
             </div>
             <div className="md:col-span-2">

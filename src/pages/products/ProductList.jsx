@@ -197,31 +197,29 @@ const ProductList = () => {
   return (
     <div className="space-y-4 sm:space-y-6 relative">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
-        <div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Products</h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">Manage your furniture product catalog</p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+        <div className="flex flex-row items-center justify-end gap-2 shrink-0 sm:pt-1">
           <button
             type="button"
             onClick={handleAddToNewOrder}
             disabled={selectedIds.size === 0}
-            className="btn-secondary w-full sm:w-auto justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-secondary whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <ShoppingCart className="w-4 h-4" />
-            <span className="hidden sm:inline">Add to New Order</span>
-            <span className="sm:hidden">New Order</span>
+            <ShoppingCart className="w-4 h-4 shrink-0" />
+            <span>Add to New Order</span>
             {selectedIds.size > 0 && (
-              <span className="ml-1 text-xs bg-primary-100 text-primary-800 px-1.5 py-0.5 rounded-full">
+              <span className="text-xs bg-primary-100 text-primary-800 px-1.5 py-0.5 rounded-full">
                 {selectedIds.size}
               </span>
             )}
           </button>
-          <Link to="/app/products/new" className="btn-primary w-full sm:w-auto justify-center sm:justify-start">
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Add Product</span>
-            <span className="sm:hidden">Add</span>
+          <Link to="/app/products/new" className="btn-primary whitespace-nowrap">
+            <Plus className="w-4 h-4 shrink-0" />
+            <span>Add Product</span>
           </Link>
         </div>
       </div>

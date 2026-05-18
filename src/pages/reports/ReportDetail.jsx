@@ -8,7 +8,7 @@ import LoadingSpinner from "../../components/common/LoadingSpinner";
 import ImageLightbox from "../../components/common/ImageLightbox";
 import logo from "../../assets/logo.jpeg";
 import svlkLogo from "../../assets/svlk.jpeg";
-import { fetchImageForExcel, getImageUrl } from "../../utils/imageUtils";
+import { fetchImageForExcel, fitImageToBox, getImageUrl } from "../../utils/imageUtils";
 import { formatReportDate } from "../../utils/formatDate";
 import {
   BANK_OPTIONS,
@@ -697,34 +697,22 @@ const ReportDetail = () => {
               extension: imageInfo.extension || "png", // Use detected extension
             });
 
-            // Keep aspect ratio: scale image to fit within the cell
-            // Column width 25 = approximately 187 pixels (at 96 DPI, 1 unit ≈ 7.5 pixels)
-            // Limit image width to ~150 pixels to stay within column bounds with padding
-            const maxImageWidth = 150; // pixels, to fit in column width 25
-            const maxImageHeight = 50; // px, should fit in row height ~60
-            let targetWidth = maxImageWidth;
-            let targetHeight = maxImageHeight;
-            
-            if (imageInfo.width && imageInfo.height && imageInfo.width > 0 && imageInfo.height > 0) {
-              const ratio = imageInfo.width / imageInfo.height;
-              
-              // Calculate dimensions maintaining aspect ratio
-              // Try to fit by height first
-              targetHeight = maxImageHeight;
-              targetWidth = targetHeight * ratio;
-              
-              // If too wide, scale down by width instead
-              if (targetWidth > maxImageWidth) {
-                targetWidth = maxImageWidth;
-                targetHeight = targetWidth / ratio;
-              }
-            }
+            const maxImageWidth = 120;
+            const maxImageHeight = 52;
+            const { width: targetWidth, height: targetHeight } = fitImageToBox(
+              imageInfo.width,
+              imageInfo.height,
+              maxImageWidth,
+              maxImageHeight
+            );
 
-            // Place image centered in the cell, with padding to prevent overflow
+            const rowHeightPx = 60;
+            const verticalOffset = Math.max(0, (rowHeightPx - targetHeight) / 2) / rowHeightPx;
+
             worksheet.addImage(imageId, {
               tl: {
-                col: pictureColumnIndex - 1 + 0.2, // More padding from left to prevent overflow
-                row: rowIndex - 1 + 0.15,
+                col: pictureColumnIndex - 1 + 0.15,
+                row: rowIndex - 1 + 0.1 + verticalOffset * 0.8,
               },
               ext: { width: targetWidth, height: targetHeight },
               editAs: "oneCell",
