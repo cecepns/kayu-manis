@@ -195,38 +195,40 @@ const ProductList = () => {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6 relative">
+    <div className="w-full min-w-0 max-w-full space-y-4 sm:space-y-6 relative">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-4 min-w-0 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Products</h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">Manage your furniture product catalog</p>
         </div>
-        <div className="flex flex-row items-center justify-end gap-2 shrink-0 sm:pt-1">
+        <div className="flex flex-wrap items-center gap-2 shrink-0 w-full xl:w-auto xl:justify-end">
           <button
             type="button"
             onClick={handleAddToNewOrder}
             disabled={selectedIds.size === 0}
-            className="btn-secondary whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-success disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <ShoppingCart className="w-4 h-4 shrink-0" />
-            <span>Add to New Order</span>
+            <span className="hidden lg:inline">Add to New Order</span>
+            <span className="lg:hidden">New Order</span>
             {selectedIds.size > 0 && (
-              <span className="text-xs bg-primary-100 text-primary-800 px-1.5 py-0.5 rounded-full">
+              <span className="text-xs bg-white/25 text-white px-1.5 py-0.5 rounded-full">
                 {selectedIds.size}
               </span>
             )}
           </button>
-          <Link to="/app/products/new" className="btn-primary whitespace-nowrap">
+          <Link to="/app/products/new" className="btn-primary">
             <Plus className="w-4 h-4 shrink-0" />
-            <span>Add Product</span>
+            <span className="hidden sm:inline">Add Product</span>
+            <span className="sm:hidden">Add</span>
           </Link>
         </div>
       </div>
 
       {/* Search and Filters */}
-      <div className="card">
-        <div className="flex flex-col sm:flex-row gap-4">
+      <div className="card min-w-0">
+        <div className="flex flex-col sm:flex-row gap-4 min-w-0">
           <SearchBar 
             onSearch={handleSearch}
             placeholder="Search by KM Code, client code, description..."
@@ -258,7 +260,7 @@ const ProductList = () => {
       )}
 
       {/* Products Table - Desktop View */}
-      <div className="hidden md:block card overflow-hidden">
+      <div className="hidden md:block card p-0 overflow-hidden min-w-0">
         {products.length === 0 ? (
           <div className="text-center py-12">
             <Package className="mx-auto h-12 w-12 text-gray-400 mb-4" />
@@ -271,7 +273,7 @@ const ProductList = () => {
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto -mx-6">
+            <div className="overflow-x-auto w-full">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="table-header">
                   <tr>
