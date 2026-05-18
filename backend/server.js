@@ -13,6 +13,44 @@ app.use(cors());
 app.use(express.json());
 app.use('/uploads-furniture', express.static(path.join(__dirname, 'uploads-furniture')));
 
+// Image base64 proxy for Excel export (avoids browser CORS issues)
+app.get('/api/images/base64', async (req, res) => {
+  try {
+    const imagePath = req.query.path;
+    if (!imagePath || typeof imagePath !== 'string') {
+      return res.status(400).json({ error: 'Path is required' });
+    }
+    if (!imagePath.startsWith('/uploads-furniture/')) {
+      return res.status(400).json({ error: 'Invalid image path' });
+    }
+
+    const relativePath = imagePath.replace(/^\//, '');
+    const fullPath = path.join(__dirname, relativePath);
+
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ error: 'Image not found' });
+    }
+
+    const buffer = fs.readFileSync(fullPath);
+    const ext = path.extname(fullPath).toLowerCase();
+    let extension = 'jpeg';
+    if (ext === '.png') extension = 'png';
+    else if (ext === '.jpg' || ext === '.jpeg') extension = 'jpeg';
+    else if (ext === '.gif') extension = 'gif';
+    else if (ext === '.webp') extension = 'png';
+
+    res.json({
+      base64: buffer.toString('base64'),
+      extension,
+      width: null,
+      height: null,
+    });
+  } catch (error) {
+    console.error('Error reading image:', error);
+    res.status(500).json({ error: 'Failed to read image' });
+  }
+});
+
 // Create uploads directory if it doesn't exist
 const uploadsDir = path.join(__dirname, 'uploads-furniture');
 if (!fs.existsSync(uploadsDir)) {
@@ -98,8 +136,8 @@ app.get('/api/products', async (req, res) => {
     const folderId = req.query.folder_id;
     
     if (search) {
-      whereClause = 'WHERE (p.km_code LIKE ? OR p.description LIKE ?)';
-      queryParams = [`%${search}%`, `%${search}%`];
+      whereClause = 'WHERE (p.km_code LIKE ? OR p.description LIKE ? OR p.client_code LIKE ?)';
+      queryParams = [`%${search}%`, `%${search}%`, `%${search}%`];
     }
     
     if (folderId) {
@@ -611,6 +649,7 @@ app.post('/api/orders', async (req, res) => {
 
     const {
       no_pi,
+      no_po,
       buyer_name,
       buyer_address,
       currency,
@@ -618,6 +657,10 @@ app.post('/api/orders', async (req, res) => {
       volume,
       port_loading,
       destination_port,
+      terms_of_payment,
+      delivery_terms,
+      cargo_ready_by,
+      bank_id,
       custom_columns,
       template_type,
       items
@@ -649,10 +692,15 @@ app.post('/api/orders', async (req, res) => {
 
     // Insert order with buyer_id
     const [orderResult] = await connection.execute(
-      'INSERT INTO orders (buyer_id, no_pi, buyer_name, buyer_address, currency, invoice_date, volume, port_loading, destination_port, custom_columns, template_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      `INSERT INTO orders (
+        buyer_id, no_pi, no_po, buyer_name, buyer_address, currency, invoice_date,
+        volume, port_loading, destination_port, terms_of_payment, delivery_terms,
+        cargo_ready_by, bank_id, custom_columns, template_type
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         buyerId,
         no_pi,
+        no_po || null,
         buyer_name,
         buyer_address,
         currency || 'USD',
@@ -660,6 +708,10 @@ app.post('/api/orders', async (req, res) => {
         volume || null,
         port_loading || null,
         destination_port || null,
+        terms_of_payment || null,
+        delivery_terms || null,
+        cargo_ready_by || null,
+        bank_id || null,
         custom_columns ? JSON.stringify(custom_columns) : null,
         template_type || 'normal'
       ]
@@ -715,6 +767,7 @@ app.put('/api/orders/:id', async (req, res) => {
 
     const {
       no_pi,
+      no_po,
       buyer_name,
       buyer_address,
       currency,
@@ -722,6 +775,10 @@ app.put('/api/orders/:id', async (req, res) => {
       volume,
       port_loading,
       destination_port,
+      terms_of_payment,
+      delivery_terms,
+      cargo_ready_by,
+      bank_id,
       custom_columns,
       template_type,
       items
@@ -753,10 +810,16 @@ app.put('/api/orders/:id', async (req, res) => {
 
     // Update order with buyer_id
     await connection.execute(
-      'UPDATE orders SET buyer_id = ?, no_pi = ?, buyer_name = ?, buyer_address = ?, currency = ?, invoice_date = ?, volume = ?, port_loading = ?, destination_port = ?, custom_columns = ?, template_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      `UPDATE orders SET
+        buyer_id = ?, no_pi = ?, no_po = ?, buyer_name = ?, buyer_address = ?, currency = ?,
+        invoice_date = ?, volume = ?, port_loading = ?, destination_port = ?,
+        terms_of_payment = ?, delivery_terms = ?, cargo_ready_by = ?, bank_id = ?,
+        custom_columns = ?, template_type = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`,
       [
         buyerId,
         no_pi,
+        no_po || null,
         buyer_name,
         buyer_address,
         currency || 'USD',
@@ -764,6 +827,10 @@ app.put('/api/orders/:id', async (req, res) => {
         volume || null,
         port_loading || null,
         destination_port || null,
+        terms_of_payment || null,
+        delivery_terms || null,
+        cargo_ready_by || null,
+        bank_id || null,
         custom_columns ? JSON.stringify(custom_columns) : null,
         template_type || 'normal',
         req.params.id

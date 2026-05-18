@@ -1,16 +1,26 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { ArrowLeft, Plus, Trash2, Package } from "lucide-react";
 import Select from "react-select";
 import { ordersAPI } from "../../utils/apiOrders";
 import { productsAPI } from "../../utils/apiProducts";
 import { buyersAPI } from "../../utils/apiBuyers";
 import LoadingSpinner from "../../components/common/LoadingSpinner";
+import CreatableSelectInput from "../../components/common/CreatableSelectInput";
+import {
+  DEFAULT_TERMS_OF_PAYMENT,
+  DEFAULT_DELIVERY_TERMS,
+  DEFAULT_CARGO_READY_BY,
+  BANK_OPTIONS,
+  DEFAULT_BANK_ID,
+} from "../../constants/reportDefaults";
 
 const OrderForm = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams();
   const isEdit = Boolean(id);
+  const prefillProductIds = location.state?.productIds;
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -22,6 +32,7 @@ const OrderForm = () => {
 
   const [orderData, setOrderData] = useState({
     no_pi: "",
+    no_po: "",
     buyer_name: "",
     buyer_address: "",
     currency: "USD",
@@ -31,6 +42,10 @@ const OrderForm = () => {
     volume: "",
     port_loading: "",
     destination_port: "",
+    terms_of_payment: DEFAULT_TERMS_OF_PAYMENT[0],
+    delivery_terms: DEFAULT_DELIVERY_TERMS[0],
+    cargo_ready_by: DEFAULT_CARGO_READY_BY,
+    bank_id: DEFAULT_BANK_ID,
     // Template type for Excel export
     template_type: "normal",
     // Custom columns (max 5)
@@ -106,6 +121,7 @@ const OrderForm = () => {
 
       setOrderData({
         no_pi: order.no_pi || "",
+        no_po: order.no_po || "",
         buyer_name: order.buyer_name || "",
         buyer_address: order.buyer_address || "",
         currency: order.currency || "USD",
@@ -115,6 +131,10 @@ const OrderForm = () => {
         volume: order.volume || "",
         port_loading: order.port_loading || "",
         destination_port: order.destination_port || "",
+        terms_of_payment: order.terms_of_payment || DEFAULT_TERMS_OF_PAYMENT[0],
+        delivery_terms: order.delivery_terms || DEFAULT_DELIVERY_TERMS[0],
+        cargo_ready_by: order.cargo_ready_by || DEFAULT_CARGO_READY_BY,
+        bank_id: order.bank_id || DEFAULT_BANK_ID,
         template_type: order.template_type || "normal",
         custom_columns: order.custom_columns
           ? typeof order.custom_columns === "string"
@@ -174,6 +194,75 @@ const OrderForm = () => {
       loadOrder();
     }
   }, [isEdit, id, loadOrder]);
+
+  const buildItemFromProduct = useCallback((product) => {
+    const qty = 1;
+    const fobPrice = parseFloat(product.fob_price) || 0;
+    let cbmTotal = 0;
+    if (product.packing_width && product.packing_depth && product.packing_height) {
+      const w = parseFloat(product.packing_width) || 0;
+      const d = parseFloat(product.packing_depth) || 0;
+      const h = parseFloat(product.packing_height) || 0;
+      if (w > 0 && d > 0 && h > 0) {
+        cbmTotal = (w * d * h * qty) / 1000000;
+      }
+    }
+    if ((!cbmTotal || cbmTotal === 0) && product.cbm) {
+      cbmTotal = (parseFloat(product.cbm) || 0) * qty;
+    }
+    const gw = parseFloat(product.gross_weight || 0) * qty;
+    const nw = parseFloat(product.net_weight || 0) * qty;
+    return {
+      product_id: String(product.id),
+      client_code: product.client_code || null,
+      qty,
+      cbm_total: parseFloat(cbmTotal || 0).toFixed(4),
+      fob_total_usd: (Math.round(fobPrice * qty * 100) / 100).toFixed(2),
+      gross_weight_total: gw.toFixed(2),
+      net_weight_total: nw.toFixed(2),
+      total_gw_total: gw.toFixed(2),
+      total_nw_total: nw.toFixed(2),
+      fob: product.fob_price || "",
+      discount_5: 0,
+      discount_10: null,
+      custom_column_values: {},
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isEdit || !prefillProductIds?.length) return;
+    let cancelled = false;
+
+    const prefillFromProducts = async () => {
+      try {
+        const items = [];
+        const loadedProducts = [];
+        for (const productId of prefillProductIds) {
+          const product = await productsAPI.getProduct(productId);
+          if (cancelled) return;
+          loadedProducts.push(product);
+          items.push(buildItemFromProduct(product));
+        }
+        if (cancelled) return;
+        setProducts((prev) => {
+          const map = new Map(prev.map((p) => [p.id, p]));
+          loadedProducts.forEach((p) => map.set(p.id, p));
+          return Array.from(map.values());
+        });
+        setOrderData((prev) => ({
+          ...prev,
+          items: items.length > 0 ? items : prev.items,
+        }));
+      } catch (error) {
+        console.error("Error prefilling order from products:", error);
+      }
+    };
+
+    prefillFromProducts();
+    return () => {
+      cancelled = true;
+    };
+  }, [isEdit, prefillProductIds, buildItemFromProduct]);
 
   useEffect(() => {
     return () => {
@@ -627,9 +716,14 @@ const OrderForm = () => {
 
     return {
       ...data,
+      no_po: nullIfEmpty(data.no_po),
       volume: nullIfEmpty(data.volume),
       port_loading: nullIfEmpty(data.port_loading),
       destination_port: nullIfEmpty(data.destination_port),
+      terms_of_payment: nullIfEmpty(data.terms_of_payment),
+      delivery_terms: nullIfEmpty(data.delivery_terms),
+      cargo_ready_by: nullIfEmpty(data.cargo_ready_by),
+      bank_id: nullIfEmpty(data.bank_id),
       custom_columns:
         data.custom_columns &&
         data.custom_columns.length > 0 &&
@@ -795,6 +889,23 @@ const OrderForm = () => {
                 className="input-field"
                 placeholder="Buyer address will be auto-filled when buyer is selected"
                 readOnly
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="no_po"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                No PO
+              </label>
+              <input
+                type="text"
+                id="no_po"
+                name="no_po"
+                value={orderData.no_po}
+                onChange={handleOrderInfoChange}
+                className="input-field"
+                placeholder="Purchase order number"
               />
             </div>
             <div>
@@ -1018,7 +1129,21 @@ const OrderForm = () => {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div className="lg:col-span-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Client Code
+                      </label>
+                      <input
+                        type="text"
+                        value={item.client_code || selectedProduct?.client_code || ""}
+                        onChange={(e) =>
+                          handleItemChange(index, "client_code", e.target.value)
+                        }
+                        className="input-field"
+                        placeholder="Buyer / client code"
+                      />
+                    </div>
+                    <div className="lg:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Product <span className="text-red-500">*</span>
                       </label>
@@ -1317,6 +1442,84 @@ const OrderForm = () => {
               <Plus className="w-4 h-4" />
               Add Item
             </button> 
+          </div>
+        </div>
+
+        {/* Report footer (terms & bank) */}
+        <div className="card">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            Report Footer (Terms & Bank)
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="terms_of_payment" className="block text-sm font-medium text-gray-700 mb-1">
+                Terms of Payment
+              </label>
+              <CreatableSelectInput
+                id="terms_of_payment"
+                name="terms_of_payment"
+                value={orderData.terms_of_payment}
+                onChange={handleOrderInfoChange}
+                options={DEFAULT_TERMS_OF_PAYMENT}
+                placeholder="Select or type custom terms"
+              />
+            </div>
+            <div>
+              <label htmlFor="delivery_terms" className="block text-sm font-medium text-gray-700 mb-1">
+                Delivery Terms
+              </label>
+              <CreatableSelectInput
+                id="delivery_terms"
+                name="delivery_terms"
+                value={orderData.delivery_terms}
+                onChange={handleOrderInfoChange}
+                options={DEFAULT_DELIVERY_TERMS}
+                placeholder="Select or type custom delivery terms"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label htmlFor="cargo_ready_by" className="block text-sm font-medium text-gray-700 mb-1">
+                Cargo Ready By
+              </label>
+              <input
+                type="text"
+                id="cargo_ready_by"
+                name="cargo_ready_by"
+                value={orderData.cargo_ready_by}
+                onChange={handleOrderInfoChange}
+                className="input-field"
+                placeholder="e.g. 12 WEEKS AFTER DEPOSITE RECEIVED"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label htmlFor="bank_id" className="block text-sm font-medium text-gray-700 mb-1">
+                Bank
+              </label>
+              <select
+                id="bank_id"
+                name="bank_id"
+                value={orderData.bank_id}
+                onChange={handleOrderInfoChange}
+                className="input-field"
+              >
+                {BANK_OPTIONS.map((bank) => (
+                  <option key={bank.id} value={bank.id}>
+                    {bank.name}
+                  </option>
+                ))}
+              </select>
+              {(() => {
+                const bank = BANK_OPTIONS.find((b) => b.id === orderData.bank_id) || BANK_OPTIONS[0];
+                return (
+                  <div className="mt-3 p-3 bg-gray-50 rounded-lg text-sm space-y-1 text-gray-700">
+                    <p><span className="font-semibold text-blue-800">ADDRESS</span> : {bank.address}</p>
+                    <p><span className="font-semibold text-blue-800">NAME</span> : {bank.accountName}</p>
+                    <p><span className="font-semibold text-blue-800">EURO ACCOUNT</span> : {bank.euroAccount}</p>
+                    <p><span className="font-semibold text-blue-800">SWIFT CODE</span> : {bank.swiftCode}</p>
+                  </div>
+                );
+              })()}
+            </div>
           </div>
         </div>
 

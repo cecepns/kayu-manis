@@ -1,14 +1,17 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, PencilIcon, Trash2, Package, Folder, Download, QrCode, Copy } from 'lucide-react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Plus, PencilIcon, Trash2, Package, Folder, Download, QrCode, Copy, ShoppingCart } from 'lucide-react';
 import QRCode from 'qrcode';
 import { productsAPI } from '../../utils/apiProducts';
 import { foldersAPI } from '../../utils/apiFolders';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import Pagination from '../../components/common/Pagination';
 import SearchBar from '../../components/common/SearchBar';
+import ImageLightbox from '../../components/common/ImageLightbox';
+import { getImageUrl } from '../../utils/imageUtils';
 
 const ProductList = () => {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
   const selectedFolderId = searchParams.get('folder') || '';
@@ -23,6 +26,8 @@ const ProductList = () => {
   const itemsPerPage = 10;
   const previousSearchTermRef = useRef(searchTerm);
   const isFirstLoad = useRef(true);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [lightboxImage, setLightboxImage] = useState(null);
 
   const setCurrentPage = useCallback((page) => {
     setSearchParams((prev) => {
@@ -129,6 +134,33 @@ const ProductList = () => {
     }
   }, [setSearchParams]);
 
+  const toggleSelect = (productId) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(productId)) next.delete(productId);
+      else next.add(productId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === products.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(products.map((p) => p.id)));
+    }
+  };
+
+  const handleAddToNewOrder = () => {
+    if (selectedIds.size === 0) {
+      alert('Select at least one product');
+      return;
+    }
+    navigate('/app/orders/new', {
+      state: { productIds: Array.from(selectedIds) },
+    });
+  };
+
   const handleDownloadQRCode = async (productId) => {
     try {
       // Get base URL (frontend URL)
@@ -170,11 +202,28 @@ const ProductList = () => {
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Products</h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">Manage your furniture product catalog</p>
         </div>
-        <Link to="/app/products/new" className="btn-primary w-full sm:w-auto justify-center sm:justify-start">
-          <Plus className="w-4 h-4" />
-          <span className="hidden sm:inline">Add Product</span>
-          <span className="sm:hidden">Add</span>
-        </Link>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={handleAddToNewOrder}
+            disabled={selectedIds.size === 0}
+            className="btn-secondary w-full sm:w-auto justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ShoppingCart className="w-4 h-4" />
+            <span className="hidden sm:inline">Add to New Order</span>
+            <span className="sm:hidden">New Order</span>
+            {selectedIds.size > 0 && (
+              <span className="ml-1 text-xs bg-primary-100 text-primary-800 px-1.5 py-0.5 rounded-full">
+                {selectedIds.size}
+              </span>
+            )}
+          </button>
+          <Link to="/app/products/new" className="btn-primary w-full sm:w-auto justify-center sm:justify-start">
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Add Product</span>
+            <span className="sm:hidden">Add</span>
+          </Link>
+        </div>
       </div>
 
       {/* Search and Filters */}
@@ -182,7 +231,7 @@ const ProductList = () => {
         <div className="flex flex-col sm:flex-row gap-4">
           <SearchBar 
             onSearch={handleSearch}
-            placeholder="Search products by KM Code, description..."
+            placeholder="Search by KM Code, client code, description..."
             className="flex-1"
             initialValue={searchTerm}
           />
@@ -228,8 +277,20 @@ const ProductList = () => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="table-header">
                   <tr>
+                    <th className="px-3 py-3 text-center w-10">
+                      <input
+                        type="checkbox"
+                        checked={products.length > 0 && selectedIds.size === products.length}
+                        onChange={toggleSelectAll}
+                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        title="Select all on this page"
+                      />
+                    </th>
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Product
+                    </th>
+                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Client Code
                     </th>
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Size (W×D×H)
@@ -253,16 +314,34 @@ const ProductList = () => {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {products.map((product) => (
-                    <tr key={product.id} className="hover:bg-gray-50">
+                    <tr key={product.id} className={`hover:bg-gray-50 ${selectedIds.has(product.id) ? 'bg-primary-50/50' : ''}`}>
+                      <td className="px-3 py-4 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(product.id)}
+                          onChange={() => toggleSelect(product.id)}
+                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                      </td>
                       <td className="px-4 lg:px-6 py-4">
                         <div className="flex items-center">
                           <div className="flex-shrink-0 h-12 w-12">
                             {product.picture_url ? (
-                              <img 
-                                src={`https://api-be.kayumanishomefurniture.com${product.picture_url}`}
-                                alt={product.description}
-                                className="h-12 w-12 object-cover rounded-lg border border-gray-200"
-                              />
+                              <button
+                                type="button"
+                                onClick={() => setLightboxImage({
+                                  src: product.picture_url,
+                                  alt: product.description,
+                                  filename: product.km_code,
+                                })}
+                                className="block cursor-zoom-in"
+                              >
+                                <img 
+                                  src={getImageUrl(product.picture_url)}
+                                  alt={product.description}
+                                  className="h-12 w-12 object-cover rounded-lg border border-gray-200 hover:opacity-90"
+                                />
+                              </button>
                             ) : (
                               <div className="h-12 w-12 bg-gray-100 rounded-lg flex items-center justify-center">
                                 <Package className="w-6 h-6 text-gray-400" />
@@ -292,6 +371,9 @@ const ProductList = () => {
                             </div>
                           </div>
                         </div>
+                      </td>
+                      <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {product.client_code || '-'}
                       </td>
                       <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {product.size_width}×{product.size_depth}×{product.size_height}
@@ -374,15 +456,31 @@ const ProductList = () => {
         ) : (
           <>
             {products.map((product) => (
-              <div key={product.id} className="card">
+              <div key={product.id} className={`card ${selectedIds.has(product.id) ? 'ring-2 ring-primary-300' : ''}`}>
                 <div className="flex items-start space-x-4">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(product.id)}
+                    onChange={() => toggleSelect(product.id)}
+                    className="mt-2 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
                   <div className="flex-shrink-0">
                     {product.picture_url ? (
-                      <img 
-                        src={`https://api-be.kayumanishomefurniture.com${product.picture_url}`}
-                        alt={product.description}
-                        className="h-16 w-16 object-cover rounded-lg border border-gray-200"
-                      />
+                      <button
+                        type="button"
+                        onClick={() => setLightboxImage({
+                          src: product.picture_url,
+                          alt: product.description,
+                          filename: product.km_code,
+                        })}
+                        className="block cursor-zoom-in"
+                      >
+                        <img 
+                          src={getImageUrl(product.picture_url)}
+                          alt={product.description}
+                          className="h-16 w-16 object-cover rounded-lg border border-gray-200 hover:opacity-90"
+                        />
+                      </button>
                     ) : (
                       <div className="h-16 w-16 bg-gray-100 rounded-lg flex items-center justify-center">
                         <Package className="w-8 h-8 text-gray-400" />
@@ -448,6 +546,10 @@ const ProductList = () => {
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                       <div>
+                        <span className="text-gray-500">Client Code:</span>
+                        <span className="ml-1 text-gray-900 font-medium">{product.client_code || '-'}</span>
+                      </div>
+                      <div>
                         <span className="text-gray-500">Size:</span>
                         <span className="ml-1 text-gray-900 font-medium">
                           {product.size_width}×{product.size_depth}×{product.size_height}
@@ -485,6 +587,15 @@ const ProductList = () => {
           </>
         )}
       </div>
+
+      {lightboxImage && (
+        <ImageLightbox
+          src={lightboxImage.src}
+          alt={lightboxImage.alt}
+          filename={lightboxImage.filename}
+          onClose={() => setLightboxImage(null)}
+        />
+      )}
     </div>
   );
 };

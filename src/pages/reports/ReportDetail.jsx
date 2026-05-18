@@ -5,7 +5,19 @@ import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import { ordersAPI } from "../../utils/apiOrders";
 import LoadingSpinner from "../../components/common/LoadingSpinner";
+import ImageLightbox from "../../components/common/ImageLightbox";
 import logo from "../../assets/logo.jpeg";
+import svlkLogo from "../../assets/svlk.jpeg";
+import { fetchImageForExcel, getImageUrl } from "../../utils/imageUtils";
+import { formatReportDate } from "../../utils/formatDate";
+import {
+  BANK_OPTIONS,
+  DEFAULT_BANK_ID,
+} from "../../constants/reportDefaults";
+
+const getBankDetails = (bankId) =>
+  BANK_OPTIONS.find((b) => b.id === (bankId || DEFAULT_BANK_ID)) ||
+  BANK_OPTIONS[0];
 
 const ReportDetail = () => {
   const { id } = useParams();
@@ -18,6 +30,7 @@ const ReportDetail = () => {
     total: 0,
     message: "",
   });
+  const [lightboxImage, setLightboxImage] = useState(null);
 
   const loadReportData = useCallback(async () => {
     try {
@@ -72,6 +85,8 @@ const ReportDetail = () => {
   }
 
   const { order, items, summary } = reportData;
+  const bankDetails = getBankDetails(order?.bank_id);
+  const reportDate = formatReportDate(order?.invoice_date || order?.created_at);
   const displayCurrency = order?.currency || summary?.currency || "USD";
   const isSpecialTemplate = order?.template_type === 'special';
   const customColumns = order?.custom_columns
@@ -232,15 +247,15 @@ const ReportDetail = () => {
           font: { size: 11 },
         },
         {
-          text: "Phone : +62-274-7471285,  Fax : +62-274-412217\n",
+          text: "Phone : +62-274-7471285\n",
           font: { size: 11 },
         },
         {
-          text: "E-mail : cvkayumanis@hotmail.com\n",
+          text: "E-mail : kayumanisliving@gmail.com\n",
           font: { size: 11 },
         },
         {
-          text: "www.kayumanis.asia",
+          text: "www.kayumanishomefurniture.com",
           font: { size: 11, color: { argb: "FF800000" } },
         },
       ],
@@ -254,31 +269,53 @@ const ReportDetail = () => {
     // Add logo image on the left of the letterhead
     setExportProgress({ current: 10, total: 100, message: "Adding logo..." });
     try {
-      const logoInfo = await fetchImageInfo(logo);
-      if (logoInfo?.base64) {
-        const logoId = workbook.addImage({
-          base64: logoInfo.base64,
-          extension: "jpeg",
-        });
-        const targetHeight = 70;
-        let targetWidth = 70;
-        if (logoInfo.width && logoInfo.height) {
-          const ratio = logoInfo.width / logoInfo.height;
-          targetWidth = targetHeight * ratio;
-        }
+      const logoResponse = await fetch(logo);
+      const logoBlob = await logoResponse.blob();
+      const logoBase64 = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result;
+          resolve(typeof result === "string" ? result.split(",")[1] : null);
+        };
+        reader.readAsDataURL(logoBlob);
+      });
+      if (logoBase64) {
+        const logoId = workbook.addImage({ base64: logoBase64, extension: "jpeg" });
         worksheet.addImage(logoId, {
-          // Keep logo fully in columns 1-3 area
           tl: { col: 0.2, row: letterheadRow.number - 1 + 0.3 },
-          ext: { width: targetWidth, height: targetHeight },
+          ext: { width: 70, height: 70 },
           editAs: "oneCell",
         });
-        // Make first columns wide enough for logo and spacing
         worksheet.getColumn(1).width = 26;
         worksheet.getColumn(2).width = 6;
         worksheet.getColumn(3).width = 4;
       }
     } catch (e) {
       console.error("Error adding logo to Excel letterhead:", e);
+    }
+
+    // SVLK logo top-right
+    try {
+      const response = await fetch(svlkLogo);
+      const blob = await response.blob();
+      const svlkBase64 = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result;
+          resolve(typeof result === "string" ? result.split(",")[1] : null);
+        };
+        reader.readAsDataURL(blob);
+      });
+      if (svlkBase64) {
+        const svlkId = workbook.addImage({ base64: svlkBase64, extension: "jpeg" });
+        worksheet.addImage(svlkId, {
+          tl: { col: 17, row: letterheadRow.number - 1 + 0.2 },
+          ext: { width: 90, height: 70 },
+          editAs: "oneCell",
+        });
+      }
+    } catch (e) {
+      console.error("Error adding SVLK logo to Excel:", e);
     }
 
     // Blank row after letterhead
@@ -326,6 +363,14 @@ const ReportDetail = () => {
       buyerNameAndDateRow.number,
       10
     );
+
+    // No PO row (below buyer name)
+    if (order.no_po) {
+      const noPoValues = createRowValues();
+      noPoValues[0] = `No PO : ${order.no_po}`;
+      const noPoRow = worksheet.addRow(noPoValues);
+      worksheet.mergeCells(noPoRow.number, 1, noPoRow.number, 10);
+    }
 
     // Buyer address row with Volume (first line of Invoice Information)
     const buyerAddressAndVolumeValues = createRowValues();
@@ -377,12 +422,7 @@ const ReportDetail = () => {
     // Date row (fourth line of Invoice Information)
     const dateRowValues = createRowValues();
     dateRowValues[11] = "Date:";
-    const dateValue = order.invoice_date
-      ? new Date(order.invoice_date).toLocaleDateString()
-      : order.created_at
-      ? new Date(order.created_at).toLocaleDateString()
-      : "-";
-    dateRowValues[12] = dateValue;
+    dateRowValues[12] = formatReportDate(order.invoice_date || order.created_at);
     const dateRow = worksheet.addRow(dateRowValues);
     dateRow.eachCell((cell, colNumber) => {
       if (colNumber === 11 || colNumber === 12) {
@@ -565,129 +605,8 @@ const ReportDetail = () => {
       worksheet.getColumn(index + 1).width = width;
     });
 
-    // Helper: fetch image as base64 + original dimensions
-    async function fetchImageInfo(url) {
-      if (!url) return null;
-      try {
-        const response = await fetch(url, {
-          mode: 'cors',
-          cache: 'no-cache'
-        });
-        if (!response.ok) {
-          console.warn(`Failed to fetch image: ${url}, status: ${response.status}`);
-          return null;
-        }
-        const blob = await response.blob();
-        
-        // Detect image format from Content-Type or file extension
-        const contentType = blob.type || '';
-        const urlLower = url.toLowerCase();
-        let extension = 'jpeg'; // default
-        
-        if (contentType.includes('png') || urlLower.includes('.png')) {
-          extension = 'png';
-        } else if (contentType.includes('jpeg') || contentType.includes('jpg') || urlLower.includes('.jpg') || urlLower.includes('.jpeg')) {
-          extension = 'jpeg';
-        } else if (contentType.includes('avif') || urlLower.includes('.avif')) {
-          // AVIF needs to be converted to PNG/JPEG for ExcelJS
-          extension = 'png';
-        } else if (contentType.includes('webp') || urlLower.includes('.webp')) {
-          extension = 'png';
-        }
-
-        return await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const result = reader.result;
-            if (typeof result === "string") {
-              // Get intrinsic width/height so we can keep aspect ratio in Excel
-              const image = new Image();
-              image.crossOrigin = 'anonymous';
-              
-              image.onload = () => {
-                try {
-                  let finalBase64 = result.split(",")[1];
-                  let finalExtension = extension;
-                  
-                  // Convert AVIF/WebP to PNG using canvas if needed
-                  const needsConversion = contentType.includes('avif') || contentType.includes('webp') || 
-                      urlLower.includes('.avif') || urlLower.includes('.webp');
-                  
-                  if (needsConversion) {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = image.width;
-                    canvas.height = image.height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(image, 0, 0);
-                    
-                    // Convert to PNG using Promise
-                    canvas.toBlob((convertedBlob) => {
-                      if (convertedBlob) {
-                        const reader2 = new FileReader();
-                        reader2.onloadend = () => {
-                          const pngResult = reader2.result;
-                          if (typeof pngResult === "string") {
-                            const convertedBase64 = pngResult.split(",")[1];
-                            resolve({
-                              base64: convertedBase64,
-                              width: image.width,
-                              height: image.height,
-                              extension: 'png',
-                            });
-                          } else {
-                            resolve(null);
-                          }
-                        };
-                        reader2.onerror = () => {
-                          console.error("Error reading converted image");
-                          resolve(null);
-                        };
-                        reader2.readAsDataURL(convertedBlob);
-                      } else {
-                        console.error("Failed to convert image to PNG");
-                        resolve(null);
-                      }
-                    }, 'image/png');
-                  } else {
-                    // Use original format
-                    resolve({
-                      base64: finalBase64,
-                      width: image.width,
-                      height: image.height,
-                      extension: finalExtension,
-                    });
-                  }
-                } catch (e) {
-                  console.error("Error processing image:", e);
-                  resolve(null);
-                }
-              };
-              
-              image.onerror = (err) => {
-                console.error("Error loading image:", err);
-                resolve(null);
-              };
-              
-              image.src = result;
-            } else {
-              resolve(null);
-            }
-          };
-          reader.onerror = (err) => {
-            console.error("Error reading image blob:", err);
-            reject(err);
-          };
-          reader.readAsDataURL(blob);
-        });
-      } catch (e) {
-        console.error("Error fetching image for Excel:", e, url);
-        return null;
-      }
-    }
-
     // Data rows with images
-    const baseUrlForImages = "https://api-be.kayumanishomefurniture.com";
-    const pictureColumnIndex = 4 + (isSpecialTemplate ? 2 : 0); // "Picture" column (adjust for Client Barcode + Client Description if special template)
+    const pictureColumnIndex = 4 + (isSpecialTemplate ? 2 : 0);
 
     setExportProgress({ current: 30, total: 100, message: "Processing items..." });
 
@@ -771,8 +690,7 @@ const ReportDetail = () => {
 
       if (item.picture_url) {
         try {
-          const fullUrl = `${baseUrlForImages}${item.picture_url}`;
-          const imageInfo = await fetchImageInfo(fullUrl);
+          const imageInfo = await fetchImageForExcel(item.picture_url);
           if (imageInfo?.base64) {
             const imageId = workbook.addImage({
               base64: imageInfo.base64,
@@ -812,7 +730,7 @@ const ReportDetail = () => {
               editAs: "oneCell",
             });
           } else {
-            console.warn(`Failed to load image for item ${item.km_code}: ${fullUrl}`);
+            console.warn(`Failed to load image for item ${item.km_code}: ${item.picture_url}`);
           }
         } catch (error) {
           console.error(`Error adding image for item ${item.km_code}:`, error);
@@ -891,6 +809,27 @@ const ReportDetail = () => {
     // Merge from "TOTAL" label to the column just before "Qty"
     const mergeEndCol = qtyColIndex > 1 ? qtyColIndex - 1 : 1;
     worksheet.mergeCells(summaryRow.number, 1, summaryRow.number, mergeEndCol);
+
+    // Footer: terms & bank (left side below table)
+    worksheet.addRow([]);
+    const addFooterLine = (label, value) => {
+      const vals = createRowValues();
+      vals[0] = label;
+      vals[1] = value;
+      const row = worksheet.addRow(vals);
+      row.getCell(1).font = { bold: true };
+      worksheet.mergeCells(row.number, 2, row.number, 10);
+    };
+
+    addFooterLine("TERMS OF PAYMENT", order.terms_of_payment || "");
+    addFooterLine("DELIVERY TERMS", order.delivery_terms || "");
+    addFooterLine("Cargo Ready by", order.cargo_ready_by || "");
+    worksheet.addRow([]);
+    addFooterLine("BANK", bankDetails.name);
+    addFooterLine("ADDRESS", bankDetails.address);
+    addFooterLine("NAME", bankDetails.accountName);
+    addFooterLine("EURO ACCOUNT", bankDetails.euroAccount);
+    addFooterLine("SWIFT CODE", bankDetails.swiftCode);
 
     setExportProgress({ current: 90, total: 100, message: "Generating file..." });
 
@@ -996,7 +935,8 @@ const ReportDetail = () => {
       <div className="bg-white p-3 sm:p-5 print:p-5">
         {/* Company Header / Letterhead */}
         <div className="border-b-2 border-gray-300 pb-4 sm:pb-6 mb-4 sm:mb-6 print:mb-4 print:pb-6">
-          <div className="flex items-center gap-4 sm:gap-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-4 sm:gap-6">
             <img
               src={logo}
               alt="CV Kayu Manis"
@@ -1014,15 +954,21 @@ const ReportDetail = () => {
                 55191, Yogyakarta
               </p>
               <p className="text-xs sm:text-sm text-gray-700">
-                Phone : +62-274-7471285, Fax : +62-274-412217
+                Phone : +62-274-7471285
               </p>
               <p className="text-xs sm:text-sm text-gray-700">
-                E-mail : cvkayumanis@hotmail.com
+                E-mail : kayumanisliving@gmail.com
               </p>
               <p className="text-xs sm:text-sm text-[#800000]">
-                www.kayumanis.asia
+                www.kayumanishomefurniture.com
               </p>
             </div>
+            </div>
+            <img
+              src={svlkLogo}
+              alt="SVLK Indonesia"
+              className="h-16 sm:h-20 object-contain flex-shrink-0"
+            />
           </div>
         </div>
 
@@ -1051,6 +997,11 @@ const ReportDetail = () => {
               <div className="text-gray-600 mt-1 whitespace-pre-line">
                 {order.buyer_address}
               </div>
+              {order.no_po && (
+                <div className="text-gray-700 mt-2 font-medium">
+                  No PO : {order.no_po}
+                </div>
+              )}
             </div>
           </div>
 
@@ -1085,13 +1036,7 @@ const ReportDetail = () => {
               </div>
               <div className="flex">
                 <span className="w-28 text-gray-900 font-semibold">Date:</span>
-                <span className="font-semibold text-gray-900">
-                  {order.invoice_date
-                    ? new Date(order.invoice_date).toLocaleDateString()
-                    : order.created_at
-                    ? new Date(order.created_at).toLocaleDateString()
-                    : "-"}
-                </span>
+                <span className="font-semibold text-gray-900">{reportDate}</span>
               </div>
             </div>
           </div>
@@ -1280,11 +1225,17 @@ const ReportDetail = () => {
                     </td>
                     <td className="border border-gray-300 px-2 py-2 text-center">
                       {item.picture_url ? (
-                        <img
-                          src={`https://api-be.kayumanishomefurniture.com${item.picture_url}`}
-                          alt={item.description}
-                          className="h-12 w-12 object-cover rounded mx-auto border border-gray-200"
-                        />
+                        <button
+                          type="button"
+                          onClick={() => setLightboxImage({ src: item.picture_url, alt: item.description, filename: item.km_code })}
+                          className="mx-auto block cursor-zoom-in"
+                        >
+                          <img
+                            src={getImageUrl(item.picture_url)}
+                            alt={item.description}
+                            className="h-12 w-12 object-cover rounded mx-auto border border-gray-200 hover:opacity-90"
+                          />
+                        </button>
                       ) : (
                         <div className="h-12 w-12 bg-gray-100 rounded flex items-center justify-center mx-auto">
                           <Package className="w-6 h-6 text-gray-400" />
@@ -1484,18 +1435,57 @@ const ReportDetail = () => {
           </div>
         </div>
 
-        {/* Footer */}
-        {/* <div className="mt-8 pt-6 border-t border-gray-200 text-center text-sm text-gray-600">
-          <p className="font-medium">Terms & Conditions</p>
-          <p className="mt-2">
-            Payment: T/T 30% deposit, 70% balance against copy of B/L
-          </p>
-          <p>Delivery: FOB port of loading</p>
-          <p className="mt-4 text-xs">
-            This document serves as both Packing List and Proforma Invoice
-          </p>
-        </div> */}
+        <div className="mt-8 text-sm max-w-xl space-y-3">
+          <div>
+            <span className="font-bold text-gray-900">TERMS OF PAYMENT</span>
+            <p className="mt-1 text-gray-700">{order.terms_of_payment || "-"}</p>
+          </div>
+          <div>
+            <span className="font-bold text-gray-900">DELIVERY TERMS</span>
+            <p className="mt-1 text-gray-700">{order.delivery_terms || "-"}</p>
+          </div>
+          <div>
+            <span className="font-bold text-gray-900">Cargo Ready by</span>
+            <p className="mt-1 text-gray-700">{order.cargo_ready_by || "-"}</p>
+          </div>
+          <div className="pt-2 space-y-1">
+            <div className="flex gap-2">
+              <span className="font-bold text-blue-800 w-28">BANK</span>
+              <span>:</span>
+              <span>{bankDetails.name}</span>
+            </div>
+            <div className="flex gap-2">
+              <span className="font-bold text-blue-800 w-28">ADDRESS</span>
+              <span>:</span>
+              <span>{bankDetails.address}</span>
+            </div>
+            <div className="flex gap-2">
+              <span className="font-bold text-blue-800 w-28">NAME</span>
+              <span>:</span>
+              <span>{bankDetails.accountName}</span>
+            </div>
+            <div className="flex gap-2">
+              <span className="font-bold text-blue-800 w-28">EURO ACCOUNT</span>
+              <span>:</span>
+              <span>{bankDetails.euroAccount}</span>
+            </div>
+            <div className="flex gap-2">
+              <span className="font-bold text-blue-800 w-28">SWIFT CODE</span>
+              <span>:</span>
+              <span>{bankDetails.swiftCode}</span>
+            </div>
+          </div>
+        </div>
       </div>
+
+      {lightboxImage && (
+        <ImageLightbox
+          src={lightboxImage.src}
+          alt={lightboxImage.alt}
+          filename={lightboxImage.filename}
+          onClose={() => setLightboxImage(null)}
+        />
+      )}
     </div>
   );
 };
