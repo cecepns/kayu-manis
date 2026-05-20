@@ -11,13 +11,9 @@ import svlkLogo from "../../assets/svlk.jpeg";
 import { fetchImageForExcel, fitImageToBox, getImageUrl } from "../../utils/imageUtils";
 import { formatReportDate } from "../../utils/formatDate";
 import {
-  BANK_OPTIONS,
-  DEFAULT_BANK_ID,
+  getBankDetails,
+  formatBankAccount,
 } from "../../constants/reportDefaults";
-
-const getBankDetails = (bankId) =>
-  BANK_OPTIONS.find((b) => b.id === (bankId || DEFAULT_BANK_ID)) ||
-  BANK_OPTIONS[0];
 
 const ReportDetail = () => {
   const { id } = useParams();
@@ -224,8 +220,99 @@ const ReportDetail = () => {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Packing List");
 
-    // Helper to create fixed-length row values (21 columns)
-    const createRowValues = () => Array(21).fill("");
+    const exportCustomColumns = order.custom_columns
+      ? typeof order.custom_columns === "string"
+        ? JSON.parse(order.custom_columns)
+        : order.custom_columns
+      : [];
+    const exportIsSpecial = order.template_type === "special";
+    const exportCurrency = order.currency || summary?.currency || "USD";
+
+    const headerRow1 = [
+      "No",
+      "Client Code",
+      ...(exportIsSpecial ? ["Client Barcode", "Client Description"] : []),
+      "KM Code",
+      "Picture",
+      "Description",
+      "Size (cm)",
+      "",
+      "",
+      "Packing Size (cm)",
+      "",
+      "",
+      "Color",
+      "Qty",
+      "CBM",
+      "Weight (kgs)",
+      "",
+      "",
+      "",
+      "FOB",
+      ...(exportIsSpecial ? ["Price After Discount"] : []),
+      "Total",
+      "HS Code",
+      ...exportCustomColumns,
+    ];
+
+    const headerRow2 = [
+      "",
+      "",
+      ...(exportIsSpecial ? ["", ""] : []),
+      "",
+      "",
+      "",
+      "W",
+      "D",
+      "H",
+      "W",
+      "D",
+      "H",
+      "",
+      "",
+      "",
+      "Gross W",
+      "Net W",
+      "Total GW",
+      "Total NW",
+      exportCurrency,
+      ...(exportIsSpecial ? [exportCurrency] : []),
+      exportCurrency,
+      "",
+      ...Array(exportCustomColumns.length).fill(""),
+    ];
+
+    const totalCols = headerRow1.length;
+    const createRowValues = () => Array(totalCols).fill("");
+    const buyerEndCol = Math.max(6, Math.floor(totalCols * 0.4));
+    const invoiceStartCol = Math.min(
+      totalCols - 3,
+      Math.max(buyerEndCol + 2, Math.ceil(totalCols * 0.58))
+    );
+
+    const addInvoiceRow = (label, value) => {
+      const vals = createRowValues();
+      vals[invoiceStartCol - 1] = label;
+      const row = worksheet.addRow(vals);
+      row.getCell(invoiceStartCol).font = { bold: true };
+      row.getCell(invoiceStartCol + 1).value = value ?? "";
+      worksheet.mergeCells(
+        row.number,
+        invoiceStartCol + 1,
+        row.number,
+        totalCols
+      );
+      return row;
+    };
+
+    const addFooterLine = (label, value) => {
+      const vals = createRowValues();
+      vals[0] = label;
+      vals[1] = value ?? "";
+      const row = worksheet.addRow(vals);
+      row.getCell(1).font = { bold: true };
+      worksheet.mergeCells(row.number, 2, row.number, totalCols);
+    };
 
     // Company letterhead (logo + address)
     const letterheadRow = worksheet.addRow(createRowValues());
@@ -309,8 +396,8 @@ const ReportDetail = () => {
       if (svlkBase64) {
         const svlkId = workbook.addImage({ base64: svlkBase64, extension: "jpeg" });
         worksheet.addImage(svlkId, {
-          tl: { col: 17, row: letterheadRow.number - 1 + 0.2 },
-          ext: { width: 90, height: 70 },
+          tl: { col: Math.max(0, totalCols - 4), row: letterheadRow.number - 1 + 0.15 },
+          ext: { width: 130, height: 95 },
           editAs: "oneCell",
         });
       }
@@ -323,7 +410,7 @@ const ReportDetail = () => {
 
     // Title row
     const titleRow = worksheet.addRow(["Packing List & Invoice"]);
-    worksheet.mergeCells(titleRow.number, 1, titleRow.number, 21);
+    worksheet.mergeCells(titleRow.number, 1, titleRow.number, totalCols);
     titleRow.height = 24;
     titleRow.eachCell((cell) => {
       cell.font = { bold: true, size: 14, underline: true };
@@ -332,171 +419,64 @@ const ReportDetail = () => {
 
     // PI Number row (below title)
     const piNumberRow = worksheet.addRow(["NO PI : " + (order.no_pi || "")]);
-    worksheet.mergeCells(piNumberRow.number, 1, piNumberRow.number, 21);
+    worksheet.mergeCells(piNumberRow.number, 1, piNumberRow.number, totalCols);
     piNumberRow.height = 20;
     piNumberRow.eachCell((cell) => {
       cell.font = { size: 12 };
       cell.alignment = { horizontal: "center", vertical: "middle" };
     });
 
-    // Buyer & Invoice Information block (same content as on-screen)
+    // Buyer (left) & Invoice Information (right)
     const infoHeaderValues = createRowValues();
     infoHeaderValues[0] = "Buyer Information";
-    infoHeaderValues[11] = "Invoice Information";
+    infoHeaderValues[invoiceStartCol - 1] = "Invoice Information";
     const infoHeaderRow = worksheet.addRow(infoHeaderValues);
-    worksheet.mergeCells(infoHeaderRow.number, 1, infoHeaderRow.number, 10);
-    worksheet.mergeCells(infoHeaderRow.number, 12, infoHeaderRow.number, 21);
-    infoHeaderRow.eachCell((cell, colNumber) => {
-      if (colNumber === 1 || colNumber === 12) {
-        cell.font = { bold: true };
-        cell.alignment = { horizontal: "left", vertical: "middle" };
-      }
-    });
-
-    // Buyer name row (left side only)
-    const buyerNameAndDateValues = createRowValues();
-    buyerNameAndDateValues[0] = order.buyer_name || "";
-    const buyerNameAndDateRow = worksheet.addRow(buyerNameAndDateValues);
+    worksheet.mergeCells(infoHeaderRow.number, 1, infoHeaderRow.number, buyerEndCol);
     worksheet.mergeCells(
-      buyerNameAndDateRow.number,
-      1,
-      buyerNameAndDateRow.number,
-      10
+      infoHeaderRow.number,
+      invoiceStartCol,
+      infoHeaderRow.number,
+      totalCols
     );
+    infoHeaderRow.getCell(1).font = { bold: true };
+    infoHeaderRow.getCell(invoiceStartCol).font = { bold: true };
 
-    // No PO row (below buyer name)
+    const buyerNameRow = worksheet.addRow(createRowValues());
+    buyerNameRow.getCell(1).value = order.buyer_name || "";
+    worksheet.mergeCells(buyerNameRow.number, 1, buyerNameRow.number, buyerEndCol);
+
     if (order.no_po) {
-      const noPoValues = createRowValues();
-      noPoValues[0] = `No PO : ${order.no_po}`;
-      const noPoRow = worksheet.addRow(noPoValues);
-      worksheet.mergeCells(noPoRow.number, 1, noPoRow.number, 10);
+      const noPoRow = worksheet.addRow(createRowValues());
+      noPoRow.getCell(1).value = `No PO : ${order.no_po}`;
+      worksheet.mergeCells(noPoRow.number, 1, noPoRow.number, buyerEndCol);
     }
 
-    // Buyer address row with Volume (first line of Invoice Information)
-    const buyerAddressAndVolumeValues = createRowValues();
-    buyerAddressAndVolumeValues[0] = order.buyer_address || "";
-    buyerAddressAndVolumeValues[11] = "Volume:";
-    buyerAddressAndVolumeValues[12] =
-      order.volume && order.volume !== ""
-        ? `${order.volume} `
-        : summary.totalCBM ?? "";
-    const buyerAddressAndVolumeRow = worksheet.addRow(
-      buyerAddressAndVolumeValues
-    );
+    const buyerAddressRow = worksheet.addRow(createRowValues());
+    buyerAddressRow.getCell(1).value = order.buyer_address || "";
+    buyerAddressRow.getCell(1).alignment = { wrapText: true, vertical: "top" };
     worksheet.mergeCells(
-      buyerAddressAndVolumeRow.number,
+      buyerAddressRow.number,
       1,
-      buyerAddressAndVolumeRow.number,
-      10
+      buyerAddressRow.number,
+      buyerEndCol
     );
 
-    // Style Volume label & value as bold
-    buyerAddressAndVolumeRow.eachCell((cell, colNumber) => {
-      if (colNumber === 11 || colNumber === 12) {
-        cell.font = { bold: true };
-      }
-    });
-
-    // Port of Loading row (second line of Invoice Information)
-    const portLoadingRowValues = createRowValues();
-    portLoadingRowValues[11] = "Port of Loading:";
-    portLoadingRowValues[12] = order.port_loading || "-";
-    const portLoadingRow = worksheet.addRow(portLoadingRowValues);
-    portLoadingRow.eachCell((cell, colNumber) => {
-      if (colNumber === 11 || colNumber === 12) {
-        cell.font = { bold: true };
-      }
-    });
-
-    // Destination Port row (third line of Invoice Information)
-    const destinationPortRowValues = createRowValues();
-    destinationPortRowValues[11] = "Destination Port:";
-    destinationPortRowValues[12] = order.destination_port || "-";
-    const destinationPortRow = worksheet.addRow(destinationPortRowValues);
-    destinationPortRow.eachCell((cell, colNumber) => {
-      if (colNumber === 11 || colNumber === 12) {
-        cell.font = { bold: true };
-      }
-    });
-
-    // Date row (fourth line of Invoice Information)
-    const dateRowValues = createRowValues();
-    dateRowValues[11] = "Date:";
-    dateRowValues[12] = formatReportDate(order.invoice_date || order.created_at);
-    const dateRow = worksheet.addRow(dateRowValues);
-    dateRow.eachCell((cell, colNumber) => {
-      if (colNumber === 11 || colNumber === 12) {
-        cell.font = { bold: true };
-      }
-    });
+    const volumeValue =
+      order.volume && order.volume !== ""
+        ? `${order.volume}`
+        : summary.totalCBM ?? "";
+    addInvoiceRow("Volume:", volumeValue);
+    addInvoiceRow("Port of Loading:", order.port_loading || "-");
+    addInvoiceRow("Destination Port:", order.destination_port || "-");
+    addInvoiceRow(
+      "Date:",
+      formatReportDate(order.invoice_date || order.created_at)
+    );
 
     // Blank row before table headers
     worksheet.addRow([]);
 
     setExportProgress({ current: 20, total: 100, message: "Setting up headers..." });
-
-    // Header rows
-    const customColumns = order.custom_columns
-      ? typeof order.custom_columns === "string"
-        ? JSON.parse(order.custom_columns)
-        : order.custom_columns
-      : [];
-
-    const isSpecialTemplate = order.template_type === 'special';
-    
-    const headerRow1 = [
-      "No",
-      "Client Code",
-      ...(isSpecialTemplate ? ["Client Barcode", "Client Description"] : []),
-      "KM Code",
-      "Picture",
-      "Description",
-      "Size (cm)",
-      "",
-      "",
-      "Packing Size (cm)",
-      "",
-      "",
-      "Color",
-      "Qty",
-      "CBM",
-      "Weight (kgs)",
-      "",
-      "",
-      "",
-      "FOB",
-      ...(isSpecialTemplate ? ["Price After Discount"] : []),
-      "Total",
-      "HS Code",
-      ...customColumns, // Add custom columns
-    ];
-
-    const headerRow2 = [
-      "",
-      "",
-      ...(isSpecialTemplate ? ["", ""] : []),
-      "",
-      "",
-      "",
-      "W",
-      "D",
-      "H",
-      "W",
-      "D",
-      "H",
-      "",
-      "",
-      "",
-      "Gross W",
-      "Net W",
-      "Total GW",
-      "Total NW",
-      displayCurrency,
-      ...(isSpecialTemplate ? [displayCurrency] : []),
-      displayCurrency,
-      "",
-      ...Array(customColumns.length).fill(""), // Add empty cells for custom columns
-    ];
 
     const excelHeaderRow1 = worksheet.addRow(headerRow1);
     const excelHeaderRow2 = worksheet.addRow(headerRow2);
@@ -507,8 +487,8 @@ const ReportDetail = () => {
     let colOffset = 0;
     worksheet.mergeCells(headerRow1Index, 1, headerRow2Index, 1); // No
     worksheet.mergeCells(headerRow1Index, 2, headerRow2Index, 2); // Client Code
-    colOffset = isSpecialTemplate ? 2 : 0;
-    if (isSpecialTemplate) {
+    colOffset = exportIsSpecial ? 2 : 0;
+    if (exportIsSpecial) {
       worksheet.mergeCells(headerRow1Index, 3, headerRow2Index, 3); // Client Barcode
       worksheet.mergeCells(headerRow1Index, 4, headerRow2Index, 4); // Client Description
     }
@@ -521,19 +501,19 @@ const ReportDetail = () => {
     // FOB, Price After Discount (if special), and Total are NOT merged - they show currency in row 2
     // Only HS Code is merged vertically
     // HS Code position: 21 + colOffset for normal, 22 + colOffset for special (after Price After Discount)
-    const hsCodeCol = isSpecialTemplate ? 22 + colOffset : 21 + colOffset;
+    const hsCodeCol = exportIsSpecial ? 22 + colOffset : 21 + colOffset;
     worksheet.mergeCells(headerRow1Index, hsCodeCol, headerRow2Index, hsCodeCol); // HS Code
 
-    worksheet.mergeCells(headerRow1Index, 6 + (isSpecialTemplate ? 2 : 0), headerRow1Index, 8 + (isSpecialTemplate ? 2 : 0)); // Size (cm)
-    worksheet.mergeCells(headerRow1Index, 9 + (isSpecialTemplate ? 2 : 0), headerRow1Index, 11 + (isSpecialTemplate ? 2 : 0)); // Packing Size (cm)
-    worksheet.mergeCells(headerRow1Index, 15 + (isSpecialTemplate ? 2 : 0), headerRow1Index, 18 + (isSpecialTemplate ? 2 : 0)); // Weight (kgs)
+    worksheet.mergeCells(headerRow1Index, 6 + (exportIsSpecial ? 2 : 0), headerRow1Index, 8 + (exportIsSpecial ? 2 : 0)); // Size (cm)
+    worksheet.mergeCells(headerRow1Index, 9 + (exportIsSpecial ? 2 : 0), headerRow1Index, 11 + (exportIsSpecial ? 2 : 0)); // Packing Size (cm)
+    worksheet.mergeCells(headerRow1Index, 15 + (exportIsSpecial ? 2 : 0), headerRow1Index, 18 + (exportIsSpecial ? 2 : 0)); // Weight (kgs)
 
     // Merge custom columns (each custom column spans both header rows)
     // At this point, colOffset is 2 for special template (Client Barcode + Client Description) and 0 for regular template
     // HS Code position: 21 + colOffset for normal, 22 + colOffset for special (after Price After Discount)
     // Custom columns start after HS Code
     const customColStartIndex = hsCodeCol + 1; // Start after HS Code
-    customColumns.forEach((_, index) => {
+    exportCustomColumns.forEach((_, index) => {
       const colIndex = customColStartIndex + index;
       worksheet.mergeCells(
         headerRow1Index,
@@ -578,7 +558,7 @@ const ReportDetail = () => {
     const columnWidths = [
       5, // No
       12, // Client Code
-      ...(isSpecialTemplate ? [15, 30] : []), // Client Barcode, Client Description
+      ...(exportIsSpecial ? [15, 30] : []), // Client Barcode, Client Description
       18, // KM Code (increased width)
       18, // Picture
       30, // Description
@@ -596,17 +576,17 @@ const ReportDetail = () => {
       10, // Total GW
       10, // Total NW
       12, // FOB
-      ...(isSpecialTemplate ? [15] : []), // Price After Discount
+      ...(exportIsSpecial ? [15] : []), // Price After Discount
       14, // Total
       18, // HS Code (increased width)
-      ...Array(customColumns.length).fill(15), // Custom columns width
+      ...Array(exportCustomColumns.length).fill(15), // Custom columns width
     ];
     columnWidths.forEach((width, index) => {
       worksheet.getColumn(index + 1).width = width;
     });
 
     // Data rows with images
-    const pictureColumnIndex = 4 + (isSpecialTemplate ? 2 : 0);
+    const pictureColumnIndex = 4 + (exportIsSpecial ? 2 : 0);
 
     setExportProgress({ current: 30, total: 100, message: "Processing items..." });
 
@@ -800,15 +780,6 @@ const ReportDetail = () => {
 
     // Footer: terms & bank (left side below table)
     worksheet.addRow([]);
-    const addFooterLine = (label, value) => {
-      const vals = createRowValues();
-      vals[0] = label;
-      vals[1] = value;
-      const row = worksheet.addRow(vals);
-      row.getCell(1).font = { bold: true };
-      worksheet.mergeCells(row.number, 2, row.number, 10);
-    };
-
     addFooterLine("TERMS OF PAYMENT", order.terms_of_payment || "");
     addFooterLine("DELIVERY TERMS", order.delivery_terms || "");
     addFooterLine("Cargo Ready by", order.cargo_ready_by || "");
@@ -816,7 +787,7 @@ const ReportDetail = () => {
     addFooterLine("BANK", bankDetails.name);
     addFooterLine("ADDRESS", bankDetails.address);
     addFooterLine("NAME", bankDetails.accountName);
-    addFooterLine("EURO ACCOUNT", bankDetails.euroAccount);
+    addFooterLine("ACCOUNT", formatBankAccount(bankDetails));
     addFooterLine("SWIFT CODE", bankDetails.swiftCode);
 
     setExportProgress({ current: 90, total: 100, message: "Generating file..." });
@@ -955,7 +926,7 @@ const ReportDetail = () => {
             <img
               src={svlkLogo}
               alt="SVLK Indonesia"
-              className="h-16 sm:h-20 object-contain flex-shrink-0"
+              className="h-20 sm:h-28 object-contain flex-shrink-0"
             />
           </div>
         </div>
@@ -973,8 +944,8 @@ const ReportDetail = () => {
         </div>
 
         {/* Order Information */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
-          <div className="space-y-2">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 mb-4 sm:mb-6">
+          <div className="space-y-2 lg:col-span-5">
             <h3 className="font-semibold text-gray-900 text-sm uppercase tracking-wide border-b border-gray-200 pb-1">
               Buyer Information
             </h3>
@@ -993,11 +964,11 @@ const ReportDetail = () => {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <h3 className="font-semibold text-gray-900 text-sm uppercase tracking-wide border-b border-gray-200 pb-1">
+          <div className="space-y-2 lg:col-span-6 lg:col-start-7">
+            <h3 className="font-semibold text-gray-900 text-sm uppercase tracking-wide border-b border-gray-200 pb-1 lg:text-right">
               Invoice Information
             </h3>
-            <div className="space-y-1 text-sm">
+            <div className="space-y-1 text-sm lg:ml-auto lg:max-w-md">
               <div className="flex">
                 <span className="w-28 text-gray-900 font-semibold">
                   Volume:
@@ -1453,9 +1424,9 @@ const ReportDetail = () => {
               <span>{bankDetails.accountName}</span>
             </div>
             <div className="flex gap-2">
-              <span className="font-bold text-blue-800 w-28">EURO ACCOUNT</span>
+              <span className="font-bold text-blue-800 w-28">ACCOUNT</span>
               <span>:</span>
-              <span>{bankDetails.euroAccount}</span>
+              <span>{formatBankAccount(bankDetails)}</span>
             </div>
             <div className="flex gap-2">
               <span className="font-bold text-blue-800 w-28">SWIFT CODE</span>

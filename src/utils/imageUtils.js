@@ -108,21 +108,32 @@ export async function fetchImageForExcel(pictureUrl) {
 }
 
 export async function downloadImage(pictureUrl, filename = 'product-image') {
-  const url = getImageUrl(pictureUrl);
-  if (!url) return;
+  if (!pictureUrl) return;
 
   try {
-    const response = await fetch(url, { mode: 'cors', cache: 'no-cache' });
-    if (!response.ok) throw new Error('Failed to fetch image');
-    const blob = await response.blob();
-    const ext = url.split('.').pop()?.split('?')[0] || 'jpg';
+    const imageInfo = await fetchImageForExcel(pictureUrl);
+    if (!imageInfo?.base64) {
+      throw new Error('Image data unavailable');
+    }
+
+    const mime = MIME_BY_EXTENSION[imageInfo.extension] || 'image/jpeg';
+    const binary = atob(imageInfo.base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: mime });
+    const ext = imageInfo.extension || 'jpg';
+    const safeName = (filename || 'product-image').replace(/[^\w.-]+/g, '_');
+
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${filename}.${ext}`;
+    const objectUrl = URL.createObjectURL(blob);
+    a.href = objectUrl;
+    a.download = `${safeName}.${ext}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(a.href);
+    URL.revokeObjectURL(objectUrl);
   } catch (error) {
     console.error('Error downloading image:', error);
     alert('Failed to download image');

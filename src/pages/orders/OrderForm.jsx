@@ -13,6 +13,7 @@ import {
   DEFAULT_CARGO_READY_BY,
   BANK_OPTIONS,
   DEFAULT_BANK_ID,
+  formatBankAccount,
 } from "../../constants/reportDefaults";
 
 const toSelectOptions = (items) =>
@@ -1605,9 +1606,10 @@ const OrderForm = () => {
                 const bank = BANK_OPTIONS.find((b) => b.id === orderData.bank_id) || BANK_OPTIONS[0];
                 return (
                   <div className="mt-3 p-3 bg-gray-50 rounded-lg text-sm space-y-1 text-gray-700">
+                    <p><span className="font-semibold text-blue-800">BANK</span> : {bank.name}</p>
                     <p><span className="font-semibold text-blue-800">ADDRESS</span> : {bank.address}</p>
                     <p><span className="font-semibold text-blue-800">NAME</span> : {bank.accountName}</p>
-                    <p><span className="font-semibold text-blue-800">EURO ACCOUNT</span> : {bank.euroAccount}</p>
+                    <p><span className="font-semibold text-blue-800">ACCOUNT</span> : {formatBankAccount(bank)}</p>
                     <p><span className="font-semibold text-blue-800">SWIFT CODE</span> : {bank.swiftCode}</p>
                   </div>
                 );
