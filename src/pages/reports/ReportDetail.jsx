@@ -285,33 +285,95 @@ const ReportDetail = () => {
     const totalCols = headerRow1.length;
     const createRowValues = () => Array(totalCols).fill("");
     const buyerEndCol = Math.max(6, Math.floor(totalCols * 0.4));
-    const invoiceStartCol = Math.min(
-      totalCols - 3,
-      Math.max(buyerEndCol + 2, Math.ceil(totalCols * 0.58))
+
+    // Picture column metadata is needed before column widths are applied.
+    const pictureColumnIndex = 4 + (exportIsSpecial ? 2 : 0);
+    const pictureColWidthChars = 15;
+
+    // Apply table column widths ONCE, up-front. Setting column widths after
+    // the table has been laid out (or via a second pass) ends up overriding
+    // table columns and shifting the Picture column relative to its image.
+    const tableColumnWidths = [
+      5, // No
+      12, // Client Code
+      ...(exportIsSpecial ? [15, 30] : []), // Client Barcode, Client Description
+      18, // KM Code
+      pictureColWidthChars, // Picture
+      30, // Description
+      6, 6, 6, // Size W / D / H
+      8, 8, 8, // Packing W / D / H
+      10, // Color
+      6, // Qty
+      8, // CBM
+      10, 10, 10, 10, // Gross W, Net W, Total GW, Total NW
+      12, // FOB
+      ...(exportIsSpecial ? [15] : []), // Price After Discount
+      14, // Total
+      18, // HS Code
+      ...Array(exportCustomColumns.length).fill(15), // Custom columns
+    ];
+    tableColumnWidths.forEach((width, index) => {
+      worksheet.getColumn(index + 1).width = width;
+    });
+
+    // Helper: walk backwards from `endCol` summing widths until we reach the
+    // requested minimum. Used to derive merge ranges for label/value bands
+    // that align with the underlying table columns.
+    const findColForCumulativeWidth = (endCol, minChars) => {
+      let sum = 0;
+      for (let i = endCol; i >= 1; i--) {
+        sum += tableColumnWidths[i - 1] || 10;
+        if (sum >= minChars) return i;
+      }
+      return Math.max(1, endCol);
+    };
+
+    // Invoice information sits on the right side of the page, on the same rows
+    // as the buyer information. Use merge ranges so the visible width is wide
+    // enough for "Destination Port:" / "Port of Loading:" without resizing
+    // table columns.
+    const INVOICE_VALUE_END_COL = totalCols;
+    const INVOICE_VALUE_COL = Math.max(
+      buyerEndCol + 3,
+      findColForCumulativeWidth(INVOICE_VALUE_END_COL, 40)
+    );
+    const INVOICE_LABEL_END_COL = Math.max(
+      buyerEndCol + 2,
+      INVOICE_VALUE_COL - 1
+    );
+    const INVOICE_LABEL_COL = Math.max(
+      buyerEndCol + 2,
+      findColForCumulativeWidth(INVOICE_LABEL_END_COL, 22)
     );
 
-    const addInvoiceRow = (label, value) => {
-      const vals = createRowValues();
-      vals[invoiceStartCol - 1] = label;
-      const row = worksheet.addRow(vals);
-      row.getCell(invoiceStartCol).font = { bold: true };
-      row.getCell(invoiceStartCol + 1).value = value ?? "";
-      worksheet.mergeCells(
-        row.number,
-        invoiceStartCol + 1,
-        row.number,
-        totalCols
-      );
-      return row;
-    };
+    // Footer: label spans 2 columns (B–C), value starts at column D.
+    const FOOTER_LABEL_COL = 2;
+    const FOOTER_LABEL_END_COL = Math.min(3, totalCols);
+    const FOOTER_VALUE_COL = Math.min(totalCols, FOOTER_LABEL_END_COL + 1);
+    const FOOTER_VALUE_END_COL = Math.min(totalCols, 14);
 
     const addFooterLine = (label, value) => {
       const vals = createRowValues();
-      vals[0] = label;
-      vals[1] = value ?? "";
+      vals[FOOTER_LABEL_COL - 1] = label;
       const row = worksheet.addRow(vals);
-      row.getCell(1).font = { bold: true };
-      worksheet.mergeCells(row.number, 2, row.number, totalCols);
+      const labelCell = row.getCell(FOOTER_LABEL_COL);
+      labelCell.font = { bold: true };
+      labelCell.alignment = { horizontal: "left", vertical: "top" };
+      worksheet.mergeCells(
+        row.number,
+        FOOTER_LABEL_COL,
+        row.number,
+        FOOTER_LABEL_END_COL
+      );
+      const valueCell = row.getCell(FOOTER_VALUE_COL);
+      valueCell.value = value ?? "";
+      valueCell.alignment = { horizontal: "left", vertical: "top", wrapText: true };
+      worksheet.mergeCells(
+        row.number,
+        FOOTER_VALUE_COL,
+        row.number,
+        FOOTER_VALUE_END_COL
+      );
     };
 
     // Company letterhead (logo + address)
@@ -368,14 +430,16 @@ const ReportDetail = () => {
       });
       if (logoBase64) {
         const logoId = workbook.addImage({ base64: logoBase64, extension: "jpeg" });
+        // Anchor to the leftmost cell of the letterhead row. The image keeps a
+        // fixed 70x70px size and is allowed to visually span into the next
+        // column - we intentionally do NOT resize columns 1-3 here because they
+        // are also table columns ("No", "Client Code", "KM Code"/"Client
+        // Barcode") and resizing them misaligns the data table below.
         worksheet.addImage(logoId, {
           tl: { col: 0.2, row: letterheadRow.number - 1 + 0.3 },
           ext: { width: 70, height: 70 },
           editAs: "oneCell",
         });
-        worksheet.getColumn(1).width = 26;
-        worksheet.getColumn(2).width = 6;
-        worksheet.getColumn(3).width = 4;
       }
     } catch (e) {
       console.error("Error adding logo to Excel letterhead:", e);
@@ -429,49 +493,75 @@ const ReportDetail = () => {
     // Buyer (left) & Invoice Information (right)
     const infoHeaderValues = createRowValues();
     infoHeaderValues[0] = "Buyer Information";
-    infoHeaderValues[invoiceStartCol - 1] = "Invoice Information";
+    infoHeaderValues[INVOICE_LABEL_COL - 1] = "Invoice Information";
     const infoHeaderRow = worksheet.addRow(infoHeaderValues);
     worksheet.mergeCells(infoHeaderRow.number, 1, infoHeaderRow.number, buyerEndCol);
     worksheet.mergeCells(
       infoHeaderRow.number,
-      invoiceStartCol,
+      INVOICE_LABEL_COL,
       infoHeaderRow.number,
-      totalCols
+      INVOICE_VALUE_END_COL
     );
     infoHeaderRow.getCell(1).font = { bold: true };
-    infoHeaderRow.getCell(invoiceStartCol).font = { bold: true };
+    infoHeaderRow.getCell(INVOICE_LABEL_COL).font = { bold: true };
 
-    const buyerNameRow = worksheet.addRow(createRowValues());
-    buyerNameRow.getCell(1).value = order.buyer_name || "";
-    worksheet.mergeCells(buyerNameRow.number, 1, buyerNameRow.number, buyerEndCol);
-
-    if (order.no_po) {
-      const noPoRow = worksheet.addRow(createRowValues());
-      noPoRow.getCell(1).value = `No PO : ${order.no_po}`;
-      worksheet.mergeCells(noPoRow.number, 1, noPoRow.number, buyerEndCol);
-    }
-
-    const buyerAddressRow = worksheet.addRow(createRowValues());
-    buyerAddressRow.getCell(1).value = order.buyer_address || "";
-    buyerAddressRow.getCell(1).alignment = { wrapText: true, vertical: "top" };
-    worksheet.mergeCells(
-      buyerAddressRow.number,
-      1,
-      buyerAddressRow.number,
-      buyerEndCol
-    );
+    // Build buyer lines and invoice lines, then write them side-by-side in the same rows
+    const buyerLines = [order.buyer_name || ""];
+    if (order.no_po) buyerLines.push(`No PO : ${order.no_po}`);
+    if (order.buyer_address) buyerLines.push(order.buyer_address);
 
     const volumeValue =
       order.volume && order.volume !== ""
         ? `${order.volume}`
         : summary.totalCBM ?? "";
-    addInvoiceRow("Volume:", volumeValue);
-    addInvoiceRow("Port of Loading:", order.port_loading || "-");
-    addInvoiceRow("Destination Port:", order.destination_port || "-");
-    addInvoiceRow(
-      "Date:",
-      formatReportDate(order.invoice_date || order.created_at)
-    );
+    const invoiceLines = [
+      ["Volume:", volumeValue],
+      ["Port of Loading:", order.port_loading || "-"],
+      ["Destination Port:", order.destination_port || "-"],
+      ["Date:", formatReportDate(order.invoice_date || order.created_at)],
+    ];
+
+    const maxInfoRows = Math.max(buyerLines.length, invoiceLines.length);
+    for (let i = 0; i < maxInfoRows; i++) {
+      const vals = createRowValues();
+      if (i < buyerLines.length) vals[0] = buyerLines[i];
+      if (i < invoiceLines.length) vals[INVOICE_LABEL_COL - 1] = invoiceLines[i][0];
+      const infoRow = worksheet.addRow(vals);
+
+      // Buyer side: always merge to buyerEndCol
+      worksheet.mergeCells(infoRow.number, 1, infoRow.number, buyerEndCol);
+      if (i === buyerLines.length - 1 && buyerLines.length > 1) {
+        // Last buyer line is the address — wrap text
+        infoRow.getCell(1).alignment = { wrapText: true, vertical: "top" };
+      }
+
+      // Invoice side: label (merged + bold) + value (merged) so the labels and
+      // values have a stable, readable width regardless of table column sizes.
+      if (i < invoiceLines.length) {
+        const lc = infoRow.getCell(INVOICE_LABEL_COL);
+        lc.font = { bold: true };
+        lc.alignment = { horizontal: "left", vertical: "middle" };
+        if (INVOICE_LABEL_END_COL > INVOICE_LABEL_COL) {
+          worksheet.mergeCells(
+            infoRow.number,
+            INVOICE_LABEL_COL,
+            infoRow.number,
+            INVOICE_LABEL_END_COL
+          );
+        }
+        const vc = infoRow.getCell(INVOICE_VALUE_COL);
+        vc.value = invoiceLines[i][1];
+        vc.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
+        if (INVOICE_VALUE_END_COL > INVOICE_VALUE_COL) {
+          worksheet.mergeCells(
+            infoRow.number,
+            INVOICE_VALUE_COL,
+            infoRow.number,
+            INVOICE_VALUE_END_COL
+          );
+        }
+      }
+    }
 
     // Blank row before table headers
     worksheet.addRow([]);
@@ -554,39 +644,17 @@ const ReportDetail = () => {
       });
     }
 
-    // Column widths (approximation so picture column is wider)
-    const columnWidths = [
-      5, // No
-      12, // Client Code
-      ...(exportIsSpecial ? [15, 30] : []), // Client Barcode, Client Description
-      18, // KM Code (increased width)
-      18, // Picture
-      30, // Description
-      6, // Size W
-      6, // Size D
-      6, // Size H
-      8, // Packing W
-      8, // Packing D
-      8, // Packing H
-      10, // Color
-      6, // Qty
-      8, // CBM
-      10, // Gross W
-      10, // Net W
-      10, // Total GW
-      10, // Total NW
-      12, // FOB
-      ...(exportIsSpecial ? [15] : []), // Price After Discount
-      14, // Total
-      18, // HS Code (increased width)
-      ...Array(exportCustomColumns.length).fill(15), // Custom columns width
-    ];
-    columnWidths.forEach((width, index) => {
-      worksheet.getColumn(index + 1).width = width;
-    });
-
-    // Data rows with images
-    const pictureColumnIndex = 4 + (exportIsSpecial ? 2 : 0);
+    /** Excel default MDW column width → pixels (matches exceljs drawing math). */
+    const excelColumnWidthCharsToPixels = (charWidth) => {
+      if (charWidth <= 0) return 0;
+      const mdw = 7;
+      return Math.trunc(((256 * charWidth + Math.trunc(128 / mdw)) / 256) * mdw);
+    };
+    const PICTURE_ROW_HEIGHT_PT = 60;
+    const PICTURE_ROW_HEIGHT_PX = (PICTURE_ROW_HEIGHT_PT * 96) / 72;
+    const pictureColWidthPx = excelColumnWidthCharsToPixels(pictureColWidthChars);
+    /** Vertical offset (px) tuned for Excel anchor rendering — do not reduce. */
+    const PICTURE_ROW_DOWN_NUDGE_PX = 60;
 
     setExportProgress({ current: 30, total: 100, message: "Processing items..." });
 
@@ -657,7 +725,7 @@ const ReportDetail = () => {
       const rowIndex = row.number;
 
       row.alignment = { vertical: "middle" };
-      row.height = 60; // allow picture to be visible
+      row.height = 60; // fixed row height so image vertical centering is stable
 
       row.eachCell((cell) => {
         cell.border = {
@@ -674,10 +742,10 @@ const ReportDetail = () => {
           if (imageInfo?.base64) {
             const imageId = workbook.addImage({
               base64: imageInfo.base64,
-              extension: imageInfo.extension || "png", // Use detected extension
+              extension: imageInfo.extension || "png",
             });
 
-            const maxImageWidth = 120;
+            const maxImageWidth = 95;
             const maxImageHeight = 52;
             const { width: targetWidth, height: targetHeight } = fitImageToBox(
               imageInfo.width,
@@ -686,13 +754,23 @@ const ReportDetail = () => {
               maxImageHeight
             );
 
-            const rowHeightPx = 60;
-            const verticalOffset = Math.max(0, (rowHeightPx - targetHeight) / 2) / rowHeightPx;
+            // Fractional col/row anchors (exceljs converts px → nativeCol/RowOff).
+            const padLeftPx = Math.max(
+              2,
+              Math.round((pictureColWidthPx - targetWidth) / 2)
+            );
+            const padTopPx = Math.max(
+              4,
+              Math.round(
+                (PICTURE_ROW_HEIGHT_PX - targetHeight) / 2 +
+                  PICTURE_ROW_DOWN_NUDGE_PX
+              )
+            );
 
             worksheet.addImage(imageId, {
               tl: {
-                col: pictureColumnIndex - 1 + 0.15,
-                row: rowIndex - 1 + 0.1 + verticalOffset * 0.8,
+                col: pictureColumnIndex - 1 + padLeftPx / pictureColWidthPx,
+                row: rowIndex - 1 + padTopPx / PICTURE_ROW_HEIGHT_PX,
               },
               ext: { width: targetWidth, height: targetHeight },
               editAs: "oneCell",
