@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Package, Lock, User } from 'lucide-react';
+import { authAPI } from '../utils/apiUsers';
+import { isAuthenticated, setAuthSession, getDefaultAppRoute } from '../utils/auth';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -11,11 +13,9 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Redirect if already authenticated
   useEffect(() => {
-    const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
-    if (isAuthenticated) {
-      navigate('/app/products', { replace: true });
+    if (isAuthenticated()) {
+      navigate(getDefaultAppRoute(), { replace: true });
     }
   }, [navigate]);
 
@@ -33,27 +33,24 @@ const Login = () => {
     setError('');
     setLoading(true);
 
-    // Simple authentication: only allow admin / @admin123
-    setTimeout(() => {
-      const isValidUser =
-        formData.username === 'admin' && formData.password === '@admin123';
-
-      if (isValidUser) {
-        // Store simple auth state (in production, use proper auth tokens)
-        localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('username', formData.username);
-        navigate('/app/products');
-      } else {
-        setError('Invalid username or password');
-      }
+    try {
+      const user = await authAPI.login(formData.username.trim(), formData.password);
+      setAuthSession(user);
+      navigate(getDefaultAppRoute());
+    } catch (err) {
+      const message =
+        (typeof err === 'object' && err?.error) ||
+        (typeof err === 'object' && err?.message) ||
+        'Invalid username or password';
+      setError(message);
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-secondary-50 flex items-center justify-center px-4">
       <div className="max-w-md w-full">
-        {/* Logo/Header */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center space-x-2 mb-4">
             <Package className="h-10 w-10 text-primary-600" />
@@ -63,7 +60,6 @@ const Login = () => {
           <p className="text-gray-600">Sign in to access the admin panel</p>
         </div>
 
-        {/* Login Form */}
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
@@ -72,7 +68,6 @@ const Login = () => {
               </div>
             )}
 
-            {/* Username Field */}
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
                 Username
@@ -95,7 +90,6 @@ const Login = () => {
               </div>
             </div>
 
-            {/* Password Field */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
                 Password
@@ -118,7 +112,6 @@ const Login = () => {
               </div>
             </div>
 
-            {/* Submit Button */}
             <button
               type="submit"
               disabled={loading}
@@ -135,10 +128,9 @@ const Login = () => {
             </button>
           </form>
 
-          {/* Info Note */}
           <div className="mt-6 pt-6 border-t border-gray-200">
             <p className="text-xs text-gray-500 text-center">
-              Admin access required. Contact administrator for credentials.
+              Contact administrator if you need an account or access.
             </p>
           </div>
         </div>
@@ -148,4 +140,3 @@ const Login = () => {
 };
 
 export default Login;
-

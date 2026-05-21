@@ -654,7 +654,7 @@ const ReportDetail = () => {
     const PICTURE_ROW_HEIGHT_PX = (PICTURE_ROW_HEIGHT_PT * 96) / 72;
     const pictureColWidthPx = excelColumnWidthCharsToPixels(pictureColWidthChars);
     /** Vertical offset (px) tuned for Excel anchor rendering — do not reduce. */
-    const PICTURE_ROW_DOWN_NUDGE_PX = 60;
+    const PICTURE_ROW_DOWN_NUDGE_PX = 15;
 
     setExportProgress({ current: 30, total: 100, message: "Processing items..." });
 

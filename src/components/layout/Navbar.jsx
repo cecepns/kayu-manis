@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Package, User, LogOut, Menu } from 'lucide-react';
 import PropTypes from 'prop-types';
+import { clearAuthSession } from '../../utils/auth';
 
 const Navbar = ({ onMenuClick = () => {} }) => {
   const navigate = useNavigate();
@@ -28,11 +29,7 @@ const Navbar = ({ onMenuClick = () => {} }) => {
   }, []);
 
   const handleLogout = () => {
-    // Clear authentication data
-    localStorage.removeItem('isAuthenticated');
-    localStorage.removeItem('username');
-    
-    // Redirect to login page
+    clearAuthSession();
     navigate('/', { replace: true });
   };
 

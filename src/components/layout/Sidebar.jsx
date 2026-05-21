@@ -1,50 +1,18 @@
 import { Link, useLocation } from "react-router-dom";
-import { Package, ShoppingCart, FileText, Users, Folder, X } from "lucide-react";
+import { X } from "lucide-react";
 import PropTypes from "prop-types";
 import Logo from "../../assets/logo.jpeg";
+import { getAllowedMenuItems } from "../../utils/auth";
 
 const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
-
-  const menuItems = [
-    {
-      path: "/app/folders",
-      icon: Folder,
-      label: "Folders",
-      description: "Organize products",
-    },
-    {
-      path: "/app/products",
-      icon: Package,
-      label: "Products",
-      description: "Manage furniture catalog",
-    },
-    {
-      path: "/app/buyers",
-      icon: Users,
-      label: "Buyers",
-      description: "Manage buyer information",
-    },
-    {
-      path: "/app/orders",
-      icon: ShoppingCart,
-      label: "Orders",
-      description: "Process customer orders",
-    },
-    {
-      path: "/app/reports",
-      icon: FileText,
-      label: "Reports",
-      description: "View order reports",
-    },
-  ];
+  const menuItems = getAllowedMenuItems();
 
   const isActive = (path) => {
     return location.pathname.startsWith(path);
   };
 
   const handleLinkClick = () => {
-    // Close sidebar on mobile when link is clicked
     if (window.innerWidth < 1024) {
       onClose();
     }
@@ -52,7 +20,6 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   return (
     <>
-      {/* Mobile Overlay */}
       {isOpen && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
@@ -61,13 +28,11 @@ const Sidebar = ({ isOpen, onClose }) => {
         />
       )}
 
-      {/* Sidebar */}
       <div
         className={`fixed left-0 top-0 h-screen w-64 bg-white border-r border-gray-200 z-50 transform transition-transform duration-300 ease-in-out ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         } lg:translate-x-0`}
       >
-        {/* Close button for mobile */}
         <button
           onClick={onClose}
           className="lg:hidden absolute top-4 right-4 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"

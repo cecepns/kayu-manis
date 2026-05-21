@@ -4,6 +4,7 @@ const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const bcrypt = require('bcryptjs');
 const sizeOf = require('image-size');
 
 const app = express();
@@ -131,6 +132,42 @@ const handleDbError = (error, res, operation) => {
 
 // Helper function to convert undefined to null (for SQL bind parameters)
 const nullIfUndefined = (value) => value === undefined ? null : value;
+
+const BCRYPT_ROUNDS = 10;
+
+const hashPassword = async (password) => bcrypt.hash(password, BCRYPT_ROUNDS);
+
+const verifyPassword = async (password, storedHash) => {
+  if (storedHash?.startsWith('$2')) {
+    return bcrypt.compare(password, storedHash);
+  }
+  // Legacy SHA-256 hashes (pre-bcrypt migration)
+  const crypto = require('crypto');
+  const legacyHash = crypto.createHash('sha256').update(password).digest('hex');
+  return legacyHash === storedHash;
+};
+
+const VALID_MENU_KEYS = ['folders', 'products', 'buyers', 'orders', 'reports', 'users'];
+
+const parseMenuPermissions = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter((k) => VALID_MENU_KEYS.includes(k));
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    return Array.isArray(parsed) ? parsed.filter((k) => VALID_MENU_KEYS.includes(k)) : [];
+  } catch {
+    return [];
+  }
+};
+
+const sanitizeUser = (row) => {
+  if (!row) return null;
+  const { password, menu_permissions, ...rest } = row;
+  return {
+    ...rest,
+    menu_permissions: parseMenuPermissions(menu_permissions),
+  };
+};
 
 // Products API Routes
 // Get products with pagination and search
@@ -1193,6 +1230,238 @@ app.delete('/api/buyers/:id', async (req, res) => {
     res.json({ message: 'Buyer deleted successfully' });
   } catch (error) {
     handleDbError(error, res, 'delete buyer');
+  }
+});
+
+// Auth & Users API (no route-level authorization — permissions enforced on frontend)
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+
+    const [users] = await db.execute(
+      'SELECT * FROM users WHERE username = ? AND is_active = 1',
+      [username.trim()]
+    );
+
+    if (users.length === 0) {
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+
+    const user = users[0];
+    const passwordValid = await verifyPassword(password, user.password);
+    if (!passwordValid) {
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+
+    const menu_permissions = parseMenuPermissions(user.menu_permissions);
+    if (menu_permissions.length === 0) {
+      return res.status(403).json({ error: 'User has no menu access configured' });
+    }
+
+    res.json({
+      id: user.id,
+      username: user.username,
+      menu_permissions,
+    });
+  } catch (error) {
+    handleDbError(error, res, 'login');
+  }
+});
+
+app.get('/api/users', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+    const offset = (page - 1) * limit;
+
+    let whereClause = '';
+    let queryParams = [];
+
+    if (search) {
+      whereClause = 'WHERE username LIKE ?';
+      queryParams = [`%${search}%`];
+    }
+
+    const countQuery = `SELECT COUNT(*) as total FROM users ${whereClause}`;
+    const [countResult] = await db.execute(countQuery, queryParams);
+    const totalItems = countResult[0].total;
+    const totalPages = Math.ceil(totalItems / limit);
+
+    const usersQuery = `
+      SELECT id, username, menu_permissions, is_active, created_at, updated_at
+      FROM users
+      ${whereClause}
+      ORDER BY username ASC
+      LIMIT ? OFFSET ?
+    `;
+    const [rows] = await db.execute(usersQuery, [...queryParams, limit, offset]);
+
+    res.json({
+      users: rows.map(sanitizeUser),
+      totalItems,
+      totalPages,
+      currentPage: page,
+    });
+  } catch (error) {
+    handleDbError(error, res, 'fetch users');
+  }
+});
+
+app.get('/api/users/:id', async (req, res) => {
+  try {
+    const [users] = await db.execute(
+      'SELECT id, username, menu_permissions, is_active, created_at, updated_at FROM users WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json(sanitizeUser(users[0]));
+  } catch (error) {
+    handleDbError(error, res, 'fetch user');
+  }
+});
+
+app.post('/api/users', async (req, res) => {
+  try {
+    const { username, password, menu_permissions, is_active } = req.body;
+
+    if (!username?.trim() || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+
+    const permissions = parseMenuPermissions(menu_permissions);
+    if (permissions.length === 0) {
+      return res.status(400).json({ error: 'At least one menu permission is required' });
+    }
+
+    const [existing] = await db.execute(
+      'SELECT id FROM users WHERE username = ?',
+      [username.trim()]
+    );
+
+    if (existing.length > 0) {
+      return res.status(400).json({ error: 'Username already exists' });
+    }
+
+    const [result] = await db.execute(
+      'INSERT INTO users (username, password, menu_permissions, is_active) VALUES (?, ?, ?, ?)',
+      [
+        username.trim(),
+        await hashPassword(password),
+        JSON.stringify(permissions),
+        is_active === false || is_active === 0 ? 0 : 1,
+      ]
+    );
+
+    const [created] = await db.execute(
+      'SELECT id, username, menu_permissions, is_active, created_at, updated_at FROM users WHERE id = ?',
+      [result.insertId]
+    );
+
+    res.status(201).json(sanitizeUser(created[0]));
+  } catch (error) {
+    handleDbError(error, res, 'create user');
+  }
+});
+
+app.put('/api/users/:id', async (req, res) => {
+  try {
+    const { username, password, menu_permissions, is_active } = req.body;
+
+    const [users] = await db.execute('SELECT id FROM users WHERE id = ?', [req.params.id]);
+
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const permissions = parseMenuPermissions(menu_permissions);
+    if (permissions.length === 0) {
+      return res.status(400).json({ error: 'At least one menu permission is required' });
+    }
+
+    if (username?.trim()) {
+      const [duplicate] = await db.execute(
+        'SELECT id FROM users WHERE username = ? AND id != ?',
+        [username.trim(), req.params.id]
+      );
+
+      if (duplicate.length > 0) {
+        return res.status(400).json({ error: 'Username already exists' });
+      }
+    }
+
+    const activeValue = is_active === false || is_active === 0 ? 0 : 1;
+
+    if (password) {
+      await db.execute(
+        `UPDATE users SET
+          username = COALESCE(?, username),
+          password = ?,
+          menu_permissions = ?,
+          is_active = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+        [
+          username?.trim() || null,
+          await hashPassword(password),
+          JSON.stringify(permissions),
+          activeValue,
+          req.params.id,
+        ]
+      );
+    } else {
+      await db.execute(
+        `UPDATE users SET
+          username = COALESCE(?, username),
+          menu_permissions = ?,
+          is_active = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+        [
+          username?.trim() || null,
+          JSON.stringify(permissions),
+          activeValue,
+          req.params.id,
+        ]
+      );
+    }
+
+    const [updated] = await db.execute(
+      'SELECT id, username, menu_permissions, is_active, created_at, updated_at FROM users WHERE id = ?',
+      [req.params.id]
+    );
+
+    res.json(sanitizeUser(updated[0]));
+  } catch (error) {
+    handleDbError(error, res, 'update user');
+  }
+});
+
+app.delete('/api/users/:id', async (req, res) => {
+  try {
+    const [users] = await db.execute('SELECT id FROM users WHERE id = ?', [req.params.id]);
+
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const [adminCount] = await db.execute('SELECT COUNT(*) as total FROM users');
+    if (adminCount[0].total <= 1) {
+      return res.status(400).json({ error: 'Cannot delete the last user' });
+    }
+
+    await db.execute('DELETE FROM users WHERE id = ?', [req.params.id]);
+    res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    handleDbError(error, res, 'delete user');
   }
 });
 
