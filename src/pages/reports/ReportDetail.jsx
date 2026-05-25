@@ -875,13 +875,13 @@ const ReportDetail = () => {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
 
-    // Filename format: idOrder_tanggalsekarang (ddmmyyyy)
-    const now = new Date();
-    const pad = (n) => String(n).padStart(2, "0");
-    const formattedDate = `${pad(now.getDate())}${pad(
-      now.getMonth() + 1
-    )}${now.getFullYear()}`;
-    const fileName = `${order.id || "order"}_${formattedDate}.xlsx`;
+    const sanitizeFileName = (str) =>
+      (str || "")
+        .replace(/[\\/:*?"<>|]/g, "")
+        .replace(/\s+/g, "_")
+        .trim() || "export";
+
+    const fileName = `${sanitizeFileName(order.no_pi)}_${sanitizeFileName(order.buyer_name)}.xlsx`;
 
     setExportProgress({ current: 100, total: 100, message: "Saving file..." });
 

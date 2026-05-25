@@ -45,6 +45,12 @@ const getCreatableSelectValue = (value, options) => {
   );
 };
 
+const toProductSelectOption = (product) => ({
+  value: product.id.toString(),
+  label: `${product.client_code ? product.client_code + " - " : ""}${product.km_code} - ${product.description || ""}`,
+  product,
+});
+
 const OrderForm = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -110,13 +116,7 @@ const OrderForm = () => {
         return Array.from(productMap.values());
       });
 
-      setProductOptions(
-        fetchedProducts.map((product) => ({
-          value: product.id.toString(),
-          label: `${product.client_code ? product.client_code + " - " : ""}${product.km_code} - ${product.description || ""}`,
-          product,
-        }))
-      );
+      setProductOptions(fetchedProducts.map(toProductSelectOption));
     } catch (error) {
       console.error("Error loading products:", error);
     }
@@ -149,6 +149,59 @@ const OrderForm = () => {
         await loadBuyers(order.buyer_name);
       }
 
+      const orderItems = order.items || [];
+      const productIds = [
+        ...new Set(
+          orderItems
+            .map((item) => item.product_id)
+            .filter((pid) => pid != null && pid !== "")
+        ),
+      ];
+
+      if (productIds.length > 0) {
+        const loadedProducts = (
+          await Promise.all(
+            productIds.map(async (productId) => {
+              try {
+                return await productsAPI.getProduct(productId);
+              } catch (error) {
+                console.error(`Error loading product ${productId}:`, error);
+                const item = orderItems.find(
+                  (i) => String(i.product_id) === String(productId)
+                );
+                if (item?.km_code) {
+                  return {
+                    id: parseInt(productId, 10),
+                    km_code: item.km_code,
+                    description: item.description,
+                    picture_url: item.picture_url,
+                    client_code: item.client_code,
+                  };
+                }
+                return null;
+              }
+            })
+          )
+        ).filter(Boolean);
+
+        setProducts((prev) => {
+          const productMap = new Map(prev.map((p) => [p.id, p]));
+          loadedProducts.forEach((product) => {
+            productMap.set(product.id, product);
+          });
+          return Array.from(productMap.values());
+        });
+
+        setProductOptions((prev) => {
+          const optionMap = new Map(prev.map((opt) => [opt.value, opt]));
+          loadedProducts.forEach((product) => {
+            const option = toProductSelectOption(product);
+            optionMap.set(option.value, option);
+          });
+          return Array.from(optionMap.values());
+        });
+      }
+
       setOrderData({
         no_pi: order.no_pi || "",
         no_po: order.no_po || "",
@@ -171,9 +224,10 @@ const OrderForm = () => {
             ? JSON.parse(order.custom_columns)
             : order.custom_columns
           : [],
-        items: order.items
-          ? order.items.map((item) => ({
+        items: orderItems.length
+          ? orderItems.map((item) => ({
               ...item,
+              product_id: item.product_id ? String(item.product_id) : "",
               discount_5: item.discount_5 !== null && item.discount_5 !== undefined ? parseInt(item.discount_5) || 0 : 0, // 0 = No discount, 5 = 5%, 10 = 10%
               discount_10: null, // Not used anymore
               custom_column_values: item.custom_column_values
