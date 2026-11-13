@@ -18,7 +18,7 @@ import UserList from './pages/users/UserList';
 import UserForm from './pages/users/UserForm';
 import PublicProductDetail from './pages/public/PublicProductDetail';
 
-import { isAuthenticated, hasMenuAccess, getDefaultAppRoute } from './utils/auth';
+import { isAuthenticated, hasMenuAccess, isMenuEditor, getDefaultAppRoute } from './utils/auth';
 
 const ProtectedRoute = ({ children }) => {
   return isAuthenticated() ? children : <Navigate to="/" replace />;
@@ -36,6 +36,21 @@ const MenuRoute = ({ children, menuKey }) => {
 };
 
 MenuRoute.propTypes = {
+  children: PropTypes.node.isRequired,
+  menuKey: PropTypes.string.isRequired,
+};
+
+const EditorRoute = ({ children, menuKey }) => {
+  if (!hasMenuAccess(menuKey)) {
+    return <Navigate to={getDefaultAppRoute()} replace />;
+  }
+  if (!isMenuEditor(menuKey)) {
+    return <Navigate to={`/app/${menuKey}`} replace />;
+  }
+  return children;
+};
+
+EditorRoute.propTypes = {
   children: PropTypes.node.isRequired,
   menuKey: PropTypes.string.isRequired,
 };
@@ -72,17 +87,17 @@ function App() {
             <Route
               path="products/new"
               element={
-                <MenuRoute menuKey="products">
+                <EditorRoute menuKey="products">
                   <ProductForm />
-                </MenuRoute>
+                </EditorRoute>
               }
             />
             <Route
               path="products/:id/edit"
               element={
-                <MenuRoute menuKey="products">
+                <EditorRoute menuKey="products">
                   <ProductForm />
-                </MenuRoute>
+                </EditorRoute>
               }
             />
 
@@ -97,17 +112,17 @@ function App() {
             <Route
               path="folders/new"
               element={
-                <MenuRoute menuKey="folders">
+                <EditorRoute menuKey="folders">
                   <FolderForm />
-                </MenuRoute>
+                </EditorRoute>
               }
             />
             <Route
               path="folders/:id/edit"
               element={
-                <MenuRoute menuKey="folders">
+                <EditorRoute menuKey="folders">
                   <FolderForm />
-                </MenuRoute>
+                </EditorRoute>
               }
             />
 
@@ -122,17 +137,17 @@ function App() {
             <Route
               path="buyers/new"
               element={
-                <MenuRoute menuKey="buyers">
+                <EditorRoute menuKey="buyers">
                   <BuyerForm />
-                </MenuRoute>
+                </EditorRoute>
               }
             />
             <Route
               path="buyers/:id/edit"
               element={
-                <MenuRoute menuKey="buyers">
+                <EditorRoute menuKey="buyers">
                   <BuyerForm />
-                </MenuRoute>
+                </EditorRoute>
               }
             />
 
@@ -147,17 +162,17 @@ function App() {
             <Route
               path="orders/new"
               element={
-                <MenuRoute menuKey="orders">
+                <EditorRoute menuKey="orders">
                   <OrderForm />
-                </MenuRoute>
+                </EditorRoute>
               }
             />
             <Route
               path="orders/:id/edit"
               element={
-                <MenuRoute menuKey="orders">
+                <EditorRoute menuKey="orders">
                   <OrderForm />
-                </MenuRoute>
+                </EditorRoute>
               }
             />
 
@@ -189,17 +204,17 @@ function App() {
             <Route
               path="users/new"
               element={
-                <MenuRoute menuKey="users">
+                <EditorRoute menuKey="users">
                   <UserForm />
-                </MenuRoute>
+                </EditorRoute>
               }
             />
             <Route
               path="users/:id/edit"
               element={
-                <MenuRoute menuKey="users">
+                <EditorRoute menuKey="users">
                   <UserForm />
-                </MenuRoute>
+                </EditorRoute>
               }
             />
           </Route>

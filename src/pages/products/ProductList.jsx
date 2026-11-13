@@ -9,6 +9,7 @@ import Pagination from '../../components/common/Pagination';
 import SearchBar from '../../components/common/SearchBar';
 import ImageLightbox from '../../components/common/ImageLightbox';
 import { getImageUrl } from '../../utils/imageUtils';
+import { isMenuEditor, canViewPrice, hasMenuAccess, getAllowedFolderIds, isFolderAllowed } from '../../utils/auth';
 
 const ProductList = () => {
   const navigate = useNavigate();
@@ -28,6 +29,17 @@ const ProductList = () => {
   const isFirstLoad = useRef(true);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [lightboxImage, setLightboxImage] = useState(null);
+
+  const allowedFolderIds = getAllowedFolderIds();
+  const hasFolderRestriction = Boolean(allowedFolderIds && allowedFolderIds.length > 0);
+  const singleAllowedFolderId =
+    hasFolderRestriction && allowedFolderIds.length === 1
+      ? String(allowedFolderIds[0])
+      : null;
+
+  const canEditProducts = isMenuEditor('products');
+  const canAccessOrders = hasMenuAccess('orders');
+  const showPrice = canViewPrice();
 
   const setCurrentPage = useCallback((page) => {
     setSearchParams((prev) => {
@@ -56,11 +68,23 @@ const ProductList = () => {
   const loadFolders = useCallback(async () => {
     try {
       const response = await foldersAPI.getFolders();
-      setFolders(response.folders || []);
+      let foldersData = response.folders || [];
+      if (hasFolderRestriction) {
+        foldersData = foldersData.filter((f) => isFolderAllowed(f.id));
+      }
+      setFolders(foldersData);
     } catch (error) {
       console.error('Error loading folders:', error);
     }
-  }, []);
+  }, [hasFolderRestriction]);
+
+  const effectiveFolderId = singleAllowedFolderId
+    ? singleAllowedFolderId
+    : selectedFolderId
+    ? selectedFolderId
+    : hasFolderRestriction
+    ? allowedFolderIds.join(',')
+    : '';
 
   const loadProducts = useCallback(async () => {
     try {
@@ -69,8 +93,17 @@ const ProductList = () => {
       } else {
         setLoading(true);
       }
-      const response = await productsAPI.getProducts(currentPage, itemsPerPage, searchTerm, selectedFolderId);
-      setProducts(response.products);
+      const response = await productsAPI.getProducts(
+        currentPage,
+        itemsPerPage,
+        searchTerm,
+        effectiveFolderId
+      );
+      let productsList = response.products || [];
+      if (hasFolderRestriction) {
+        productsList = productsList.filter((p) => isFolderAllowed(p.folder_id));
+      }
+      setProducts(productsList);
       setTotalPages(response.totalPages);
       setTotalItems(response.totalItems);
     } catch (error) {
@@ -83,7 +116,13 @@ const ProductList = () => {
         setLoading(false);
       }
     }
-  }, [currentPage, searchTerm, itemsPerPage, selectedFolderId]);
+  }, [currentPage, searchTerm, itemsPerPage, effectiveFolderId, hasFolderRestriction]);
+
+  useEffect(() => {
+    if (singleAllowedFolderId && selectedFolderId !== singleAllowedFolderId) {
+      setSelectedFolderId(singleAllowedFolderId);
+    }
+  }, [singleAllowedFolderId, selectedFolderId, setSelectedFolderId]);
 
   useEffect(() => {
     loadFolders();
@@ -203,26 +242,30 @@ const ProductList = () => {
           <p className="text-sm sm:text-base text-gray-600 mt-1">Manage your furniture product catalog</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0 w-full xl:w-auto xl:justify-end">
-          <button
-            type="button"
-            onClick={handleAddToNewOrder}
-            disabled={selectedIds.size === 0}
-            className="btn-success disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <ShoppingCart className="w-4 h-4 shrink-0" />
-            <span className="hidden lg:inline">Add to New Order</span>
-            <span className="lg:hidden">New Order</span>
-            {selectedIds.size > 0 && (
-              <span className="text-xs bg-white/25 text-white px-1.5 py-0.5 rounded-full">
-                {selectedIds.size}
-              </span>
-            )}
-          </button>
-          <Link to="/app/products/new" className="btn-primary">
-            <Plus className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">Add Product</span>
-            <span className="sm:hidden">Add</span>
-          </Link>
+          {canAccessOrders && (
+            <button
+              type="button"
+              onClick={handleAddToNewOrder}
+              disabled={selectedIds.size === 0}
+              className="btn-success disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ShoppingCart className="w-4 h-4 shrink-0" />
+              <span className="hidden lg:inline">Add to New Order</span>
+              <span className="lg:hidden">New Order</span>
+              {selectedIds.size > 0 && (
+                <span className="text-xs bg-white/25 text-white px-1.5 py-0.5 rounded-full">
+                  {selectedIds.size}
+                </span>
+              )}
+            </button>
+          )}
+          {canEditProducts && (
+            <Link to="/app/products/new" className="btn-primary">
+              <Plus className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline">Add Product</span>
+              <span className="sm:hidden">Add</span>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -236,11 +279,12 @@ const ProductList = () => {
             initialValue={searchTerm}
           />
           <select
-            value={selectedFolderId}
+            value={singleAllowedFolderId || selectedFolderId}
             onChange={(e) => setSelectedFolderId(e.target.value)}
-            className="input-field sm:w-48"
+            disabled={Boolean(singleAllowedFolderId)}
+            className={`input-field sm:w-48 ${singleAllowedFolderId ? 'bg-gray-100 cursor-not-allowed' : ''}`}
           >
-            <option value="">All Folders</option>
+            {!hasFolderRestriction && <option value="">All Folders</option>}
             {folders.map((folder) => (
               <option key={folder.id} value={folder.id}>
                 {folder.name} ({folder.product_count || 0})
@@ -301,15 +345,19 @@ const ProductList = () => {
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       CBM
                     </th>
-                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      FOB Price
-                    </th>
+                    {showPrice && (
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        FOB Price
+                      </th>
+                    )}
                     <th className="px-4 lg:px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       QR Code
                     </th>
-                    <th className="px-4 lg:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
+                    {canEditProducts && (
+                      <th className="px-4 lg:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -386,9 +434,11 @@ const ProductList = () => {
                       <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {product.cbm}
                       </td>
-                      <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {product.fob_price}
-                      </td>
+                      {showPrice && (
+                        <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {product.fob_price}
+                        </td>
+                      )}
                       <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-center">
                         <button
                           onClick={() => handleDownloadQRCode(product.id)}
@@ -399,31 +449,33 @@ const ProductList = () => {
                           QR Code
                         </button>
                       </td>
-                      <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                        <Link 
-                          to="/app/products/new"
-                          state={{ copyFromProductId: product.id, returnToListQuery }}
-                          className="text-gray-600 hover:text-gray-900 inline-flex items-center p-1"
-                          title="Copy"
-                        >
-                          <Copy className="w-4 h-4" />
-                        </Link>
-                        <Link 
-                          to={`/app/products/${product.id}/edit`}
-                          state={{ returnToListQuery }}
-                          className="text-primary-600 hover:text-primary-900 inline-flex items-center p-1"
-                          title="Edit"
-                        >
-                          <PencilIcon className="w-4 h-4" />
-                        </Link>
-                        <button 
-                          onClick={() => handleDelete(product.id)}
-                          className="text-red-600 hover:text-red-900 inline-flex items-center p-1"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
+                      {canEditProducts && (
+                        <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                          <Link 
+                            to="/app/products/new"
+                            state={{ copyFromProductId: product.id, returnToListQuery }}
+                            className="text-gray-600 hover:text-gray-900 inline-flex items-center p-1"
+                            title="Copy"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </Link>
+                          <Link 
+                            to={`/app/products/${product.id}/edit`}
+                            state={{ returnToListQuery }}
+                            className="text-primary-600 hover:text-primary-900 inline-flex items-center p-1"
+                            title="Edit"
+                          >
+                            <PencilIcon className="w-4 h-4" />
+                          </Link>
+                          <button 
+                            onClick={() => handleDelete(product.id)}
+                            className="text-red-600 hover:text-red-900 inline-flex items-center p-1"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -519,29 +571,33 @@ const ProductList = () => {
                         >
                           <QrCode className="w-4 h-4" />
                         </button>
-                        <Link 
-                          to="/app/products/new"
-                          state={{ copyFromProductId: product.id, returnToListQuery }}
-                          className="text-gray-600 hover:text-gray-900 p-1"
-                          title="Copy"
-                        >
-                          <Copy className="w-4 h-4" />
-                        </Link>
-                        <Link 
-                          to={`/app/products/${product.id}/edit`}
-                          state={{ returnToListQuery }}
-                          className="text-primary-600 hover:text-primary-900 p-1"
-                          title="Edit"
-                        >
-                          <PencilIcon className="w-4 h-4" />
-                        </Link>
-                        <button 
-                          onClick={() => handleDelete(product.id)}
-                          className="text-red-600 hover:text-red-900 p-1"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {canEditProducts && (
+                          <>
+                            <Link 
+                              to="/app/products/new"
+                              state={{ copyFromProductId: product.id, returnToListQuery }}
+                              className="text-gray-600 hover:text-gray-900 p-1"
+                              title="Copy"
+                            >
+                              <Copy className="w-4 h-4" />
+                            </Link>
+                            <Link 
+                              to={`/app/products/${product.id}/edit`}
+                              state={{ returnToListQuery }}
+                              className="text-primary-600 hover:text-primary-900 p-1"
+                              title="Edit"
+                            >
+                              <PencilIcon className="w-4 h-4" />
+                            </Link>
+                            <button 
+                              onClick={() => handleDelete(product.id)}
+                              className="text-red-600 hover:text-red-900 p-1"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
@@ -567,10 +623,12 @@ const ProductList = () => {
                           </span>
                         </span>
                       </div>
-                      <div>
-                        <span className="text-gray-500">FOB:</span>
-                        <span className="ml-1 text-gray-900 font-medium">{product.fob_price}</span>
-                      </div>
+                      {showPrice && (
+                        <div>
+                          <span className="text-gray-500">FOB:</span>
+                          <span className="ml-1 text-gray-900 font-medium">{product.fob_price}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

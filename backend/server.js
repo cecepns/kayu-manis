@@ -113,6 +113,33 @@ async function initializeDatabase() {
     // Test the connection
     await db.execute('SELECT 1');
     console.log('Database connection tested successfully');
+
+    // Auto-migrate users table if needed
+    try {
+      const [cols] = await db.execute('SHOW COLUMNS FROM users');
+      const existingCols = cols.map((c) => c.Field);
+
+      if (!existingCols.includes('menu_roles')) {
+        await db.execute(
+          "ALTER TABLE users ADD COLUMN menu_roles JSON NULL COMMENT 'Role per menu: editor or viewer'"
+        );
+        console.log('Added menu_roles column to users');
+      }
+      if (!existingCols.includes('can_view_price')) {
+        await db.execute(
+          "ALTER TABLE users ADD COLUMN can_view_price TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Access to view FOB and total price'"
+        );
+        console.log('Added can_view_price column to users');
+      }
+      if (!existingCols.includes('allowed_folder_ids')) {
+        await db.execute(
+          "ALTER TABLE users ADD COLUMN allowed_folder_ids JSON NULL COMMENT 'Restricted folder IDs, null for all folders'"
+        );
+        console.log('Added allowed_folder_ids column to users');
+      }
+    } catch (migErr) {
+      console.warn('Migration check for users table:', migErr.message);
+    }
   } catch (error) {
     console.error('Error connecting to database:', error.message);
     console.log('Make sure MySQL is running and the database exists');
@@ -160,12 +187,47 @@ const parseMenuPermissions = (value) => {
   }
 };
 
+const parseMenuRoles = (value, permissions = []) => {
+  let roles = {};
+  if (value) {
+    try {
+      roles = typeof value === 'string' ? JSON.parse(value) : (typeof value === 'object' ? value : {});
+    } catch {
+      roles = {};
+    }
+  }
+  const result = {};
+  permissions.forEach((key) => {
+    result[key] = roles && roles[key] === 'viewer' ? 'viewer' : 'editor';
+  });
+  return result;
+};
+
+const parseAllowedFolderIds = (value) => {
+  if (!value) return null;
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      const ids = parsed.map((id) => parseInt(id, 10)).filter((n) => !isNaN(n));
+      return ids.length > 0 ? ids : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
 const sanitizeUser = (row) => {
   if (!row) return null;
-  const { password, menu_permissions, ...rest } = row;
+  // eslint-disable-next-line no-unused-vars
+  const { password, menu_permissions, menu_roles, can_view_price, allowed_folder_ids, ...rest } = row;
+  const permissions = parseMenuPermissions(menu_permissions);
   return {
     ...rest,
-    menu_permissions: parseMenuPermissions(menu_permissions),
+    menu_permissions: permissions,
+    menu_roles: parseMenuRoles(menu_roles, permissions),
+    can_view_price: can_view_price === 0 || can_view_price === false ? 0 : 1,
+    allowed_folder_ids: parseAllowedFolderIds(allowed_folder_ids),
   };
 };
 
@@ -182,6 +244,7 @@ app.get('/api/products', async (req, res) => {
     let queryParams = [];
 
     const folderId = req.query.folder_id;
+    const folderIds = req.query.folder_ids;
     
     if (search) {
       whereClause = 'WHERE (p.km_code LIKE ? OR p.description LIKE ? OR p.client_code LIKE ?)';
@@ -195,6 +258,18 @@ app.get('/api/products', async (req, res) => {
       } else {
         whereClause = 'WHERE p.folder_id = ?';
         queryParams = [folderId];
+      }
+    } else if (folderIds) {
+      const ids = folderIds.split(',').map((id) => parseInt(id.trim(), 10)).filter((n) => !isNaN(n));
+      if (ids.length > 0) {
+        const placeholders = ids.map(() => '?').join(',');
+        if (whereClause) {
+          whereClause += ` AND p.folder_id IN (${placeholders})`;
+          queryParams.push(...ids);
+        } else {
+          whereClause = `WHERE p.folder_id IN (${placeholders})`;
+          queryParams = ids;
+        }
       }
     }
 
@@ -446,8 +521,20 @@ app.delete('/api/products/:id', async (req, res) => {
 // Get all folders
 app.get('/api/folders', async (req, res) => {
   try {
+    let whereClause = '';
+    let queryParams = [];
+
+    if (req.query.ids) {
+      const ids = req.query.ids.split(',').map((id) => parseInt(id.trim(), 10)).filter((n) => !isNaN(n));
+      if (ids.length > 0) {
+        whereClause = `WHERE f.id IN (${ids.map(() => '?').join(',')})`;
+        queryParams = ids;
+      }
+    }
+
     const [folders] = await db.execute(
-      'SELECT f.*, COUNT(p.id) as product_count FROM product_folders f LEFT JOIN products p ON f.id = p.folder_id GROUP BY f.id ORDER BY f.name'
+      `SELECT f.*, COUNT(p.id) as product_count FROM product_folders f LEFT JOIN products p ON f.id = p.folder_id ${whereClause} GROUP BY f.id ORDER BY f.name`,
+      queryParams
     );
     res.json({ folders });
   } catch (error) {
@@ -1262,10 +1349,14 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(403).json({ error: 'User has no menu access configured' });
     }
 
+    const sanitized = sanitizeUser(user);
     res.json({
       id: user.id,
       username: user.username,
-      menu_permissions,
+      menu_permissions: sanitized.menu_permissions,
+      menu_roles: sanitized.menu_roles,
+      can_view_price: sanitized.can_view_price,
+      allowed_folder_ids: sanitized.allowed_folder_ids,
     });
   } catch (error) {
     handleDbError(error, res, 'login');
@@ -1293,7 +1384,7 @@ app.get('/api/users', async (req, res) => {
     const totalPages = Math.ceil(totalItems / limit);
 
     const usersQuery = `
-      SELECT id, username, menu_permissions, is_active, created_at, updated_at
+      SELECT *
       FROM users
       ${whereClause}
       ORDER BY username ASC
@@ -1315,7 +1406,7 @@ app.get('/api/users', async (req, res) => {
 app.get('/api/users/:id', async (req, res) => {
   try {
     const [users] = await db.execute(
-      'SELECT id, username, menu_permissions, is_active, created_at, updated_at FROM users WHERE id = ?',
+      'SELECT * FROM users WHERE id = ?',
       [req.params.id]
     );
 
@@ -1331,7 +1422,7 @@ app.get('/api/users/:id', async (req, res) => {
 
 app.post('/api/users', async (req, res) => {
   try {
-    const { username, password, menu_permissions, is_active } = req.body;
+    const { username, password, menu_permissions, menu_roles, can_view_price, allowed_folder_ids, is_active } = req.body;
 
     if (!username?.trim() || !password) {
       return res.status(400).json({ error: 'Username and password are required' });
@@ -1351,18 +1442,43 @@ app.post('/api/users', async (req, res) => {
       return res.status(400).json({ error: 'Username already exists' });
     }
 
-    const [result] = await db.execute(
-      'INSERT INTO users (username, password, menu_permissions, is_active) VALUES (?, ?, ?, ?)',
-      [
+    const roles = parseMenuRoles(menu_roles, permissions);
+    const viewPriceVal = can_view_price === 0 || can_view_price === false ? 0 : 1;
+    const foldersVal = parseAllowedFolderIds(allowed_folder_ids);
+    const activeVal = is_active === false || is_active === 0 ? 0 : 1;
+
+    // Check existing columns to be compatible before/after migration
+    const [cols] = await db.execute('SHOW COLUMNS FROM users');
+    const colNames = cols.map((c) => c.Field);
+
+    let insertQuery = '';
+    let insertParams = [];
+
+    if (colNames.includes('menu_roles') && colNames.includes('can_view_price') && colNames.includes('allowed_folder_ids')) {
+      insertQuery = 'INSERT INTO users (username, password, menu_permissions, menu_roles, can_view_price, allowed_folder_ids, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)';
+      insertParams = [
         username.trim(),
         await hashPassword(password),
         JSON.stringify(permissions),
-        is_active === false || is_active === 0 ? 0 : 1,
-      ]
-    );
+        JSON.stringify(roles),
+        viewPriceVal,
+        foldersVal ? JSON.stringify(foldersVal) : null,
+        activeVal,
+      ];
+    } else {
+      insertQuery = 'INSERT INTO users (username, password, menu_permissions, is_active) VALUES (?, ?, ?, ?)';
+      insertParams = [
+        username.trim(),
+        await hashPassword(password),
+        JSON.stringify(permissions),
+        activeVal,
+      ];
+    }
+
+    const [result] = await db.execute(insertQuery, insertParams);
 
     const [created] = await db.execute(
-      'SELECT id, username, menu_permissions, is_active, created_at, updated_at FROM users WHERE id = ?',
+      'SELECT * FROM users WHERE id = ?',
       [result.insertId]
     );
 
@@ -1374,7 +1490,7 @@ app.post('/api/users', async (req, res) => {
 
 app.put('/api/users/:id', async (req, res) => {
   try {
-    const { username, password, menu_permissions, is_active } = req.body;
+    const { username, password, menu_permissions, menu_roles, can_view_price, allowed_folder_ids, is_active } = req.body;
 
     const [users] = await db.execute('SELECT id FROM users WHERE id = ?', [req.params.id]);
 
@@ -1398,44 +1514,99 @@ app.put('/api/users/:id', async (req, res) => {
       }
     }
 
-    const activeValue = is_active === false || is_active === 0 ? 0 : 1;
+    const roles = parseMenuRoles(menu_roles, permissions);
+    const viewPriceVal = can_view_price === 0 || can_view_price === false ? 0 : 1;
+    const foldersVal = parseAllowedFolderIds(allowed_folder_ids);
+    const activeVal = is_active === false || is_active === 0 ? 0 : 1;
+
+    const [cols] = await db.execute('SHOW COLUMNS FROM users');
+    const colNames = cols.map((c) => c.Field);
+    const hasNewCols = colNames.includes('menu_roles') && colNames.includes('can_view_price') && colNames.includes('allowed_folder_ids');
 
     if (password) {
-      await db.execute(
-        `UPDATE users SET
-          username = COALESCE(?, username),
-          password = ?,
-          menu_permissions = ?,
-          is_active = ?,
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?`,
-        [
-          username?.trim() || null,
-          await hashPassword(password),
-          JSON.stringify(permissions),
-          activeValue,
-          req.params.id,
-        ]
-      );
+      if (hasNewCols) {
+        await db.execute(
+          `UPDATE users SET
+            username = COALESCE(?, username),
+            password = ?,
+            menu_permissions = ?,
+            menu_roles = ?,
+            can_view_price = ?,
+            allowed_folder_ids = ?,
+            is_active = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?`,
+          [
+            username?.trim() || null,
+            await hashPassword(password),
+            JSON.stringify(permissions),
+            JSON.stringify(roles),
+            viewPriceVal,
+            foldersVal ? JSON.stringify(foldersVal) : null,
+            activeVal,
+            req.params.id,
+          ]
+        );
+      } else {
+        await db.execute(
+          `UPDATE users SET
+            username = COALESCE(?, username),
+            password = ?,
+            menu_permissions = ?,
+            is_active = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?`,
+          [
+            username?.trim() || null,
+            await hashPassword(password),
+            JSON.stringify(permissions),
+            activeVal,
+            req.params.id,
+          ]
+        );
+      }
     } else {
-      await db.execute(
-        `UPDATE users SET
-          username = COALESCE(?, username),
-          menu_permissions = ?,
-          is_active = ?,
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?`,
-        [
-          username?.trim() || null,
-          JSON.stringify(permissions),
-          activeValue,
-          req.params.id,
-        ]
-      );
+      if (hasNewCols) {
+        await db.execute(
+          `UPDATE users SET
+            username = COALESCE(?, username),
+            menu_permissions = ?,
+            menu_roles = ?,
+            can_view_price = ?,
+            allowed_folder_ids = ?,
+            is_active = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?`,
+          [
+            username?.trim() || null,
+            JSON.stringify(permissions),
+            JSON.stringify(roles),
+            viewPriceVal,
+            foldersVal ? JSON.stringify(foldersVal) : null,
+            activeVal,
+            req.params.id,
+          ]
+        );
+      } else {
+        await db.execute(
+          `UPDATE users SET
+            username = COALESCE(?, username),
+            menu_permissions = ?,
+            is_active = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?`,
+          [
+            username?.trim() || null,
+            JSON.stringify(permissions),
+            activeVal,
+            req.params.id,
+          ]
+        );
+      }
     }
 
     const [updated] = await db.execute(
-      'SELECT id, username, menu_permissions, is_active, created_at, updated_at FROM users WHERE id = ?',
+      'SELECT * FROM users WHERE id = ?',
       [req.params.id]
     );
 

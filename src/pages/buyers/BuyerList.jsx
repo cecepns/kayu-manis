@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, PencilIcon, Trash2, Users } from 'lucide-react';
 import { buyersAPI } from '../../utils/apiBuyers';
+import { isMenuEditor } from '../../utils/auth';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import Pagination from '../../components/common/Pagination';
 import SearchBar from '../../components/common/SearchBar';
@@ -15,6 +16,7 @@ const BuyerList = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const itemsPerPage = 10;
   const previousSearchTermRef = useRef(searchTerm);
+  const canEditBuyers = isMenuEditor('buyers');
 
   const loadBuyers = useCallback(async () => {
     try {
@@ -41,10 +43,8 @@ const BuyerList = () => {
         loadBuyers();
       } catch (error) {
         console.error('Error deleting buyer:', error);
-        
-        let message = 'Error deleting buyer';
 
-        // If backend sent a structured error object
+        let message = 'Error deleting buyer';
         if (typeof error === 'object' && error !== null) {
           if (error.error) {
             message = error.error;
@@ -61,17 +61,14 @@ const BuyerList = () => {
   };
 
   const handleSearch = useCallback((search) => {
-    // Only update if search term actually changed
     const trimmedSearch = search.trim();
     const trimmedPrevious = (previousSearchTermRef.current || '').trim();
-    
+
     if (trimmedSearch !== trimmedPrevious) {
       previousSearchTermRef.current = search;
       setSearchTerm(search);
-      // Only reset to page 1 if search term actually changed
       setCurrentPage(1);
     }
-    // If search term didn't change, do nothing (avoid unnecessary re-renders and page resets)
   }, []);
 
   return (
@@ -82,17 +79,22 @@ const BuyerList = () => {
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Buyers</h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">Manage your buyer information</p>
         </div>
-        <Link to="/app/buyers/new" className="btn-primary w-full sm:w-auto justify-center sm:justify-start">
-          <Plus className="w-4 h-4" />
-          <span className="hidden sm:inline">Add Buyer</span>
-          <span className="sm:hidden">Add</span>
-        </Link>
+        {canEditBuyers && (
+          <Link
+            to="/app/buyers/new"
+            className="btn-primary w-full sm:w-auto justify-center sm:justify-start"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Add Buyer</span>
+            <span className="sm:hidden">Add</span>
+          </Link>
+        )}
       </div>
 
       {/* Search and Filters */}
       <div className="card">
         <div className="flex flex-col sm:flex-row gap-4">
-          <SearchBar 
+          <SearchBar
             onSearch={handleSearch}
             placeholder="Search buyers by name, address..."
             className="flex-1"
@@ -110,11 +112,15 @@ const BuyerList = () => {
           <div className="text-center py-12">
             <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No buyers found</h3>
-            <p className="text-gray-500 mb-4">Get started by adding your first buyer.</p>
-            <Link to="/app/buyers/new" className="btn-primary max-w-fit mx-auto">
-              <Plus className="w-4 h-4" />
-              Add Buyer
-            </Link>
+            <p className="text-gray-500 mb-4">
+              {canEditBuyers ? 'Get started by adding your first buyer.' : 'No buyers available.'}
+            </p>
+            {canEditBuyers && (
+              <Link to="/app/buyers/new" className="btn-primary max-w-fit mx-auto">
+                <Plus className="w-4 h-4" />
+                Add Buyer
+              </Link>
+            )}
           </div>
         ) : (
           <>
@@ -131,49 +137,49 @@ const BuyerList = () => {
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Created
                     </th>
-                    <th className="px-4 lg:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
+                    {canEditBuyers && (
+                      <th className="px-4 lg:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {buyers.map((buyer) => (
                     <tr key={buyer.id} className="hover:bg-gray-50">
                       <td className="px-4 lg:px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          {buyer.name}
-                        </div>
+                        <div className="text-sm font-medium text-gray-900">{buyer.name}</div>
                       </td>
                       <td className="px-4 lg:px-6 py-4">
-                        <div className="text-sm text-gray-500 line-clamp-2">
-                          {buyer.address}
-                        </div>
+                        <div className="text-sm text-gray-500 line-clamp-2">{buyer.address}</div>
                       </td>
                       <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {new Date(buyer.created_at).toLocaleDateString()}
                       </td>
-                      <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                        <Link 
-                          to={`/app/buyers/${buyer.id}/edit`}
-                          className="text-primary-600 hover:text-primary-900 inline-flex items-center p-1"
-                          title="Edit"
-                        >
-                          <PencilIcon className="w-4 h-4" />
-                        </Link>
-                        <button 
-                          onClick={() => handleDelete(buyer.id)}
-                          className="text-red-600 hover:text-red-900 inline-flex items-center p-1"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
+                      {canEditBuyers && (
+                        <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                          <Link
+                            to={`/app/buyers/${buyer.id}/edit`}
+                            className="text-primary-600 hover:text-primary-900 inline-flex items-center p-1"
+                            title="Edit"
+                          >
+                            <PencilIcon className="w-4 h-4" />
+                          </Link>
+                          <button
+                            onClick={() => handleDelete(buyer.id)}
+                            className="text-red-600 hover:text-red-900 inline-flex items-center p-1"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            
+
             <Pagination
               currentPage={currentPage}
               totalPages={totalPages}
@@ -195,57 +201,61 @@ const BuyerList = () => {
           <div className="card text-center py-12">
             <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No buyers found</h3>
-            <p className="text-gray-500 mb-4 text-sm">Get started by adding your first buyer.</p>
-            <Link to="/app/buyers/new" className="btn-primary w-full sm:w-auto">
-              <Plus className="w-4 h-4" />
-              Add Buyer
-            </Link>
+            <p className="text-gray-500 mb-4">
+              {canEditBuyers ? 'Get started by adding your first buyer.' : 'No buyers available.'}
+            </p>
+            {canEditBuyers && (
+              <Link
+                to="/app/buyers/new"
+                className="btn-primary w-full sm:w-auto justify-center sm:justify-start"
+              >
+                <Plus className="w-4 h-4" />
+                Add Buyer
+              </Link>
+            )}
           </div>
         ) : (
-          <>
-            {buyers.map((buyer) => (
-              <div key={buyer.id} className="card">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-semibold text-gray-900 truncate">
-                      {buyer.name}
-                    </h3>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {new Date(buyer.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div className="flex items-center space-x-2 ml-2">
-                    <Link 
+          buyers.map((buyer) => (
+            <div key={buyer.id} className="card">
+              <div className="flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-semibold text-gray-900 truncate">{buyer.name}</h3>
+                  <p className="text-sm text-gray-500 mt-1 line-clamp-2">{buyer.address}</p>
+                  <p className="text-xs text-gray-400 mt-2">
+                    Created: {new Date(buyer.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+                {canEditBuyers && (
+                  <div className="flex items-center space-x-2 ml-4">
+                    <Link
                       to={`/app/buyers/${buyer.id}/edit`}
-                      className="text-primary-600 hover:text-primary-900 p-1"
+                      className="text-primary-600 hover:text-primary-900 p-2"
                       title="Edit"
                     >
                       <PencilIcon className="w-4 h-4" />
                     </Link>
-                    <button 
+                    <button
                       onClick={() => handleDelete(buyer.id)}
-                      className="text-red-600 hover:text-red-900 p-1"
+                      className="text-red-600 hover:text-red-900 p-2"
                       title="Delete"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
-                </div>
-                <div>
-                  <span className="text-xs text-gray-500">Address:</span>
-                  <p className="text-sm text-gray-900 mt-0.5 line-clamp-3">{buyer.address}</p>
-                </div>
+                )}
               </div>
-            ))}
-            
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              totalItems={totalItems}
-              itemsPerPage={itemsPerPage}
-              onPageChange={setCurrentPage}
-            />
-          </>
+            </div>
+          ))
+        )}
+
+        {!loading && buyers.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+          />
         )}
       </div>
     </div>
@@ -253,6 +263,3 @@ const BuyerList = () => {
 };
 
 export default BuyerList;
-
-
-

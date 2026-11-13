@@ -6,6 +6,7 @@ import CreatableSelect from 'react-select/creatable';
 import { productsAPI } from '../../utils/apiProducts';
 import { foldersAPI } from '../../utils/apiFolders';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { canViewPrice, getAllowedFolderIds, isFolderAllowed } from '../../utils/auth';
 
 const ProductForm = () => {
   const navigate = useNavigate();
@@ -28,6 +29,15 @@ const ProductForm = () => {
   const [saving, setSaving] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
   const [folders, setFolders] = useState([]);
+
+  const allowedFolderIds = getAllowedFolderIds();
+  const hasFolderRestriction = Boolean(allowedFolderIds && allowedFolderIds.length > 0);
+  const singleAllowedFolderId =
+    hasFolderRestriction && allowedFolderIds.length === 1
+      ? String(allowedFolderIds[0])
+      : null;
+
+  const showPrice = canViewPrice();
 
   const [formData, setFormData] = useState({
     client_code: '',
@@ -55,6 +65,11 @@ const ProductForm = () => {
   });
 
   const applyProductToForm = useCallback((product) => {
+    if (hasFolderRestriction && product.folder_id && !isFolderAllowed(product.folder_id)) {
+      alert('You do not have permission to view or edit products in this folder.');
+      navigate(getProductsListPath());
+      return;
+    }
     let calculatedCBM = '';
     if (product.packing_width && product.packing_depth && product.packing_height) {
       const width = parseFloat(product.packing_width) || 0;
@@ -93,7 +108,7 @@ const ProductForm = () => {
     } else {
       setImagePreview(null);
     }
-  }, []);
+  }, [hasFolderRestriction, navigate]);
 
   const loadProduct = useCallback(async () => {
     try {
@@ -124,11 +139,22 @@ const ProductForm = () => {
   const loadFolders = useCallback(async () => {
     try {
       const response = await foldersAPI.getFolders();
-      setFolders(response.folders || []);
+      let folderList = response.folders || [];
+      if (hasFolderRestriction) {
+        folderList = folderList.filter((f) => isFolderAllowed(f.id));
+      }
+      setFolders(folderList);
+
+      if (singleAllowedFolderId && !isEdit) {
+        setFormData((prev) => ({
+          ...prev,
+          folder_id: prev.folder_id || singleAllowedFolderId,
+        }));
+      }
     } catch (error) {
       console.error('Error loading folders:', error);
     }
-  }, []);
+  }, [hasFolderRestriction, singleAllowedFolderId, isEdit]);
 
   useEffect(() => {
     loadFolders();
@@ -255,7 +281,7 @@ const ProductForm = () => {
         { label: 'Client Description', name: 'client_description', type: 'textarea', required: false },
         { label: 'KM Code', name: 'km_code', type: 'text', required: true },
         { label: 'Description', name: 'description', type: 'textarea', required: false },
-        { label: 'Folder', name: 'folder_id', type: 'select', options: folders.map(f => ({ value: f.id.toString(), label: f.name })), required: false },
+        { label: 'Folder', name: 'folder_id', type: 'select', options: folders.map(f => ({ value: f.id.toString(), label: f.name })), required: Boolean(singleAllowedFolderId), disabled: Boolean(singleAllowedFolderId) },
       ]
     },
     {
@@ -296,13 +322,23 @@ const ProductForm = () => {
         { label: 'Total NW (Kgs) (Auto-calculated)', name: 'total_nw', type: 'number', step: '0.01', readOnly: true }
       ]
     },
-    {
-      title: 'Pricing',
-      fields: [
-        { label: 'FOB Price', name: 'fob_price', type: 'number', step: '0.01' },
-        { label: 'Total Price (Auto-calculated)', name: 'total_price', type: 'number', step: '0.01', readOnly: true }
-      ]
-    },
+    ...(showPrice
+      ? [
+          {
+            title: 'Pricing',
+            fields: [
+              { label: 'FOB Price', name: 'fob_price', type: 'number', step: '0.01' },
+              {
+                label: 'Total Price (Auto-calculated)',
+                name: 'total_price',
+                type: 'number',
+                step: '0.01',
+                readOnly: true,
+              },
+            ],
+          },
+        ]
+      : []),
     {
       title: 'Additional Information',
       fields: [
