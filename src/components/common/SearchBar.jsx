@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Search, X } from 'lucide-react';
 
 const SearchBar = ({ onSearch, placeholder = 'Search...', className = '', initialValue = '' }) => {

@@ -28,11 +28,27 @@ const ReportDetail = () => {
   });
   const [lightboxImage, setLightboxImage] = useState(null);
 
+  const [bankAccounts, setBankAccounts] = useState([]);
+
   const loadReportData = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await ordersAPI.getOrderReport(id);
+      const [response, bankRes] = await Promise.all([
+        ordersAPI.getOrderReport(id),
+        ordersAPI.getBankAccounts().catch(() => ({ bank_accounts: [] }))
+      ]);
       setReportData(response);
+      if (bankRes?.bank_accounts) {
+        setBankAccounts(bankRes.bank_accounts.map((b) => ({
+          id: b.bank_key || String(b.id),
+          name: b.name,
+          address: b.address || '',
+          accountName: b.account_name || 'CV KAYU MANIS',
+          account: b.account,
+          accountCurrency: b.account_currency || '',
+          swiftCode: b.swift_code || ''
+        })));
+      }
     } catch (error) {
       console.error("Error loading report:", error);
       alert("Error loading report");
@@ -81,10 +97,17 @@ const ReportDetail = () => {
   }
 
   const { order, items, summary } = reportData;
-  const bankDetails = getBankDetails(order?.bank_id);
+  const bankDetails = (() => {
+    if (order?.bank_id && bankAccounts.length > 0) {
+      const found = bankAccounts.find((b) => b.id === order.bank_id);
+      if (found) return found;
+    }
+    return getBankDetails(order?.bank_id);
+  })();
   const reportDate = formatReportDate(order?.invoice_date || order?.created_at);
   const displayCurrency = order?.currency || summary?.currency || "USD";
   const isSpecialTemplate = order?.template_type === 'special';
+  const isIemanjaTemplate = order?.template_type === 'iemanja';
   const customColumns = order?.custom_columns
     ? typeof order.custom_columns === "string"
       ? JSON.parse(order.custom_columns)
@@ -194,11 +217,6 @@ const ReportDetail = () => {
         const num = typeof value === "string" ? parseFloat(value) : Number(value);
         return isNaN(num) ? null : num;
       };
-      // Round to 2 decimal places for currency/totals
-      const roundTo2 = (value) => {
-        const n = toNumber(value);
-        return n != null ? Number(parseFloat(n).toFixed(2)) : null;
-      };
       const round2Num = (n) =>
         n != null && !isNaN(n) ? Math.round(Number(n) * 100) / 100 : 0;
 
@@ -226,6 +244,7 @@ const ReportDetail = () => {
         : order.custom_columns
       : [];
     const exportIsSpecial = order.template_type === "special";
+    const exportIsIemanja = order.template_type === "iemanja";
     const exportCurrency = order.currency || summary?.currency || "USD";
 
     const headerRow1 = [
@@ -250,6 +269,7 @@ const ReportDetail = () => {
       "",
       "FOB",
       ...(exportIsSpecial ? ["Price After Discount"] : []),
+      ...(exportIsIemanja ? ["Pintu", "Laci", "Harga Engsel", "Harga Rel BLUM"] : []),
       "Total",
       "HS Code",
       ...exportCustomColumns,
@@ -277,6 +297,7 @@ const ReportDetail = () => {
       "Total NW",
       exportCurrency,
       ...(exportIsSpecial ? [exportCurrency] : []),
+      ...(exportIsIemanja ? ["Qty", "Qty", exportCurrency, exportCurrency] : []),
       exportCurrency,
       "",
       ...Array(exportCustomColumns.length).fill(""),
@@ -308,6 +329,7 @@ const ReportDetail = () => {
       10, 10, 10, 10, // Gross W, Net W, Total GW, Total NW
       12, // FOB
       ...(exportIsSpecial ? [15] : []), // Price After Discount
+      ...(exportIsIemanja ? [8, 8, 14, 14] : []), // Pintu, Laci, Engsel, BLUM
       14, // Total
       18, // HS Code
       ...Array(exportCustomColumns.length).fill(15), // Custom columns
@@ -591,7 +613,8 @@ const ReportDetail = () => {
     // FOB, Price After Discount (if special), and Total are NOT merged - they show currency in row 2
     // Only HS Code is merged vertically
     // HS Code position: 21 + colOffset for normal, 22 + colOffset for special (after Price After Discount)
-    const hsCodeCol = exportIsSpecial ? 22 + colOffset : 21 + colOffset;
+    const iemanjaOffset = exportIsIemanja ? 4 : 0;
+    const hsCodeCol = (exportIsSpecial ? 22 + colOffset : 21 + colOffset) + iemanjaOffset;
     worksheet.mergeCells(headerRow1Index, hsCodeCol, headerRow2Index, hsCodeCol); // HS Code
 
     worksheet.mergeCells(headerRow1Index, 6 + (exportIsSpecial ? 2 : 0), headerRow1Index, 8 + (exportIsSpecial ? 2 : 0)); // Size (cm)
@@ -698,7 +721,7 @@ const ReportDetail = () => {
         toNumber(item.total_gw_total), // Total GW - number
         toNumber(item.total_nw_total), // Total NW - number
         toNumber(item.fob || item.fob_price), // FOB - number
-        ...(isSpecialTemplate ? [
+        ...(exportIsSpecial ? [
           (() => {
             const fobPrice = parseFloat(item.fob || item.fob_price || 0);
             const discountType = parseInt(item.discount_5) || 0;
@@ -712,6 +735,12 @@ const ReportDetail = () => {
             }
             return priceAfterDiscount;
           })()
+        ] : []),
+        ...(exportIsIemanja ? [
+          toNumber(item.door_count) || "-",
+          toNumber(item.drawer_count) || "-",
+          item.hinge_price ? toNumber(item.hinge_price) : "-",
+          item.blum_runner_price ? toNumber(item.blum_runner_price) : "-",
         ] : []),
         getItemFobTotal(item), // Total - same rounding as OrderForm
         item.hs_code || "",
@@ -800,7 +829,6 @@ const ReportDetail = () => {
     const qtyColIndex = headerRow1.findIndex((col) => col === "Qty") + 1;
     const cbmColIndex = headerRow1.findIndex((col) => col === "CBM") + 1;
     const grossWColIndex = headerRow1.findIndex((col) => col === "Weight (kgs)") + 1; // First child will be "Gross W"
-    const fobColIndex = headerRow1.findIndex((col) => col === "FOB") + 1;
     const totalColIndex = headerRow1.findIndex((col) => col === "Total") + 1;
 
     // Defensive setter in case structure changes
@@ -1175,6 +1203,22 @@ const ReportDetail = () => {
                       Price After Discount
                     </th>
                   )}
+                  {isIemanjaTemplate && (
+                    <>
+                      <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
+                        Pintu
+                      </th>
+                      <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
+                        Laci
+                      </th>
+                      <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
+                        Harga Engsel
+                      </th>
+                      <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
+                        Harga Rel BLUM
+                      </th>
+                    </>
+                  )}
                   <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
                     Total
                   </th>
@@ -1232,6 +1276,22 @@ const ReportDetail = () => {
                     <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
                       {displayCurrency}
                     </th>
+                  )}
+                  {isIemanjaTemplate && (
+                    <>
+                      <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
+                        Qty
+                      </th>
+                      <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
+                        Qty
+                      </th>
+                      <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
+                        {displayCurrency}
+                      </th>
+                      <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
+                        {displayCurrency}
+                      </th>
+                    </>
                   )}
                   <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-xs">
                     {displayCurrency}
@@ -1338,6 +1398,22 @@ const ReportDetail = () => {
                         </div>
                       </td>
                     )}
+                    {isIemanjaTemplate && (
+                      <>
+                        <td className="border border-gray-300 px-2 py-2 text-center font-medium">
+                          {item.door_count ?? "-"}
+                        </td>
+                        <td className="border border-gray-300 px-2 py-2 text-center font-medium">
+                          {item.drawer_count ?? "-"}
+                        </td>
+                        <td className="border border-gray-300 px-2 py-2 text-center">
+                          {item.hinge_price ? parseFloat(item.hinge_price).toFixed(2) : "-"}
+                        </td>
+                        <td className="border border-gray-300 px-2 py-2 text-center">
+                          {item.blum_runner_price ? parseFloat(item.blum_runner_price).toFixed(2) : "-"}
+                        </td>
+                      </>
+                    )}
                     <td className="border border-gray-300 px-2 py-2 text-center font-medium">
                       <div>
                         {item.fob != null || item.fob_price != null
@@ -1409,6 +1485,14 @@ const ReportDetail = () => {
                     <td className="border border-gray-300 px-2 py-2 text-center">
                       <div>-</div>
                     </td>
+                  )}
+                  {isIemanjaTemplate && (
+                    <>
+                      <td className="border border-gray-300 px-2 py-2 text-center">-</td>
+                      <td className="border border-gray-300 px-2 py-2 text-center">-</td>
+                      <td className="border border-gray-300 px-2 py-2 text-center">-</td>
+                      <td className="border border-gray-300 px-2 py-2 text-center">-</td>
+                    </>
                   )}
                   <td className="border border-gray-300 px-2 py-2 text-center text-green-600">
                     <div>

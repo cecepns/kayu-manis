@@ -84,7 +84,7 @@ const storage = multer.diskStorage({
 const upload = multer({ 
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit
+    fileSize: 10 * 1024 * 1024 // 10MB limit
   },
   fileFilter: function (req, file, cb) {
     if (file.mimetype.startsWith('image/')) {
@@ -94,6 +94,11 @@ const upload = multer({
     }
   }
 });
+
+const productUpload = upload.fields([
+  { name: 'picture', maxCount: 1 },
+  { name: 'detail_pictures', maxCount: 15 }
+]);
 
 // Database connection
 const dbConfig = {
@@ -139,6 +144,111 @@ async function initializeDatabase() {
       }
     } catch (migErr) {
       console.warn('Migration check for users table:', migErr.message);
+    }
+
+    // Auto-migrate products table
+    try {
+      const [prodCols] = await db.execute('SHOW COLUMNS FROM products');
+      const existingProdCols = prodCols.map((c) => c.Field);
+      if (!existingProdCols.includes('currency')) {
+        await db.execute("ALTER TABLE products ADD COLUMN currency VARCHAR(10) NOT NULL DEFAULT 'USD' COMMENT 'Product currency'");
+        console.log('Added currency column to products');
+      }
+      if (!existingProdCols.includes('wood_cbm')) {
+        await db.execute("ALTER TABLE products ADD COLUMN wood_cbm DECIMAL(10,4) NULL COMMENT 'Finished volume CBM kayu'");
+        console.log('Added wood_cbm column to products');
+      }
+      if (!existingProdCols.includes('detail_pictures')) {
+        await db.execute("ALTER TABLE products ADD COLUMN detail_pictures JSON NULL COMMENT 'Array of detail picture URLs'");
+        console.log('Added detail_pictures column to products');
+      }
+    } catch (prodErr) {
+      console.warn('Migration check for products table:', prodErr.message);
+    }
+
+    // Auto-migrate order_items for Iemanja template
+    try {
+      const [itemCols] = await db.execute('SHOW COLUMNS FROM order_items');
+      const existingItemCols = itemCols.map((c) => c.Field);
+      if (!existingItemCols.includes('door_count')) {
+        await db.execute("ALTER TABLE order_items ADD COLUMN door_count INT NULL COMMENT 'Jumlah Pintu (Template Iemanja)'");
+        console.log('Added door_count to order_items');
+      }
+      if (!existingItemCols.includes('drawer_count')) {
+        await db.execute("ALTER TABLE order_items ADD COLUMN drawer_count INT NULL COMMENT 'Jumlah Laci (Template Iemanja)'");
+        console.log('Added drawer_count to order_items');
+      }
+      if (!existingItemCols.includes('hinge_price')) {
+        await db.execute("ALTER TABLE order_items ADD COLUMN hinge_price DECIMAL(12,2) NULL COMMENT 'Harga Engsel (Template Iemanja)'");
+        console.log('Added hinge_price to order_items');
+      }
+      if (!existingItemCols.includes('blum_runner_price')) {
+        await db.execute("ALTER TABLE order_items ADD COLUMN blum_runner_price DECIMAL(12,2) NULL COMMENT 'Harga Rel BLUM (Template Iemanja)'");
+        console.log('Added blum_runner_price to order_items');
+      }
+    } catch (itemErr) {
+      console.warn('Migration check for order_items table:', itemErr.message);
+    }
+
+    // Auto-create bank_accounts table
+    try {
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS bank_accounts (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          bank_key VARCHAR(50) NOT NULL UNIQUE,
+          name VARCHAR(100) NOT NULL,
+          bank_name VARCHAR(100) NULL,
+          account_name VARCHAR(100) NOT NULL,
+          account VARCHAR(100) NOT NULL,
+          account_currency VARCHAR(20) NULL,
+          swift_code VARCHAR(50) NULL,
+          address VARCHAR(255) NULL,
+          is_active TINYINT(1) NOT NULL DEFAULT 1,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `);
+
+      const [existingBanks] = await db.execute('SELECT COUNT(*) as total FROM bank_accounts');
+      if (existingBanks[0].total === 0) {
+        await db.execute(`
+          INSERT INTO bank_accounts (bank_key, name, bank_name, account_name, account, account_currency, swift_code, address, is_active)
+          VALUES
+            ('permata-euro', 'PERMATA EURO', 'Bank Permata', 'CV KAYU MANIS', '6902700445', 'EURO', 'BBBAIDJA', 'JL BRIGJEND KATAMSO, YOGYAKARTA, INDONESIA', 1),
+            ('permata-escrow', 'PERMATA ESCROW', 'Bank Permata', 'CV KAYU MANIS', '701466403', 'USD', 'BBBAIDJA', 'JL BRIGJEND KATAMSO, YOGYAKARTA, INDONESIA', 1),
+            ('permata-usd', 'PERMATA USD', 'Bank Permata', 'CV KAYU MANIS', '701466101', 'USD', 'BBBAIDJA', 'JL BRIGJEND KATAMSO, YOGYAKARTA, INDONESIA', 1),
+            ('permata-alex', 'PERMATA ALEX K.', 'Bank Permata', 'ALEX KURNIAWAN', '6903701232', '', 'BBBAIDJA', 'JL BRIGJEND KATAMSO, YOGYAKARTA, INDONESIA', 1)
+        `);
+        console.log('Seeded default bank_accounts');
+      }
+    } catch (bankErr) {
+      console.warn('Migration check for bank_accounts table:', bankErr.message);
+    }
+
+    // Auto-create terms_of_payment table
+    try {
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS terms_of_payment (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          name VARCHAR(255) NOT NULL UNIQUE,
+          is_active TINYINT(1) NOT NULL DEFAULT 1,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `);
+
+      const [existingTerms] = await db.execute('SELECT COUNT(*) as total FROM terms_of_payment');
+      if (existingTerms[0].total === 0) {
+        await db.execute(`
+          INSERT INTO terms_of_payment (name, is_active)
+          VALUES
+            ('30% Deposit 70% Balance Payments Agains Documents', 1),
+            ('L/C Irrevocable', 1),
+            ('50:50', 1)
+        `);
+        console.log('Seeded default terms_of_payment');
+      }
+    } catch (topErr) {
+      console.warn('Migration check for terms_of_payment table:', topErr.message);
     }
   } catch (error) {
     console.error('Error connecting to database:', error.message);
@@ -236,7 +346,7 @@ const sanitizeUser = (row) => {
 app.get('/api/products', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = req.query.limit === 'all' || parseInt(req.query.limit) === -1 ? 10000 : (parseInt(req.query.limit) || 10);
     const search = req.query.search || '';
     const offset = (page - 1) * limit;
 
@@ -349,13 +459,21 @@ app.post('/api/products', upload.single('picture'), async (req, res) => {
   try {
     const {
       client_code, client_barcode, client_description, km_code, description, folder_id, size_width, size_depth, size_height,
-      packing_width, packing_depth, packing_height, cbm, color,
-      gross_weight, net_weight, total_gw, total_nw, fob_price, total_price, hs_code
+      packing_width, packing_depth, packing_height, cbm, wood_cbm, color,
+      gross_weight, net_weight, total_gw, total_nw, fob_price, currency, total_price, hs_code
     } = req.body;
 
     let picture_url = null;
-    if (req.file) {
-      picture_url = '/uploads-furniture/' + req.file.filename;
+    const pictureFile = req.files && req.files['picture'] ? req.files['picture'][0] : (req.file || null);
+    if (pictureFile) {
+      picture_url = '/uploads-furniture/' + pictureFile.filename;
+    }
+
+    let detailPics = [];
+    if (req.files && req.files['detail_pictures']) {
+      req.files['detail_pictures'].forEach((f) => {
+        detailPics.push('/uploads-furniture/' + f.filename);
+      });
     }
 
     // Auto-calculate CBM from packing dimensions: W x D x H / 1,000,000
@@ -378,18 +496,38 @@ app.post('/api/products', upload.single('picture'), async (req, res) => {
     // Auto-calculate total_price from fob_price
     const calculatedTotalPrice = fob_price || null;
 
-    const [result] = await db.execute(`
-      INSERT INTO products (
-        client_code, client_barcode, client_description, km_code, description, folder_id, picture_url, size_width, size_depth, size_height,
-        packing_width, packing_depth, packing_height, cbm, color,
-        gross_weight, net_weight, total_gw, total_nw, fob_price, total_price, hs_code
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
+    const [prodCols] = await db.execute('SHOW COLUMNS FROM products');
+    const pColNames = prodCols.map((c) => c.Field);
+    const hasWood = pColNames.includes('wood_cbm');
+    const hasCur = pColNames.includes('currency');
+    const hasDetails = pColNames.includes('detail_pictures');
+
+    let colList = ['client_code', 'client_barcode', 'client_description', 'km_code', 'description', 'folder_id', 'picture_url', 'size_width', 'size_depth', 'size_height', 'packing_width', 'packing_depth', 'packing_height', 'cbm', 'color', 'gross_weight', 'net_weight', 'total_gw', 'total_nw', 'fob_price', 'total_price', 'hs_code'];
+    let valList = [
       client_code || null, client_barcode || null, client_description || null, km_code, description || null, folder_id || null, picture_url, size_width, size_depth, size_height,
       packing_width, packing_depth, packing_height, calculatedCBM || cbm, color,
       gross_weight, net_weight, calculatedTotalGW || total_gw, calculatedTotalNW || total_nw || null, 
       fob_price, calculatedTotalPrice || total_price, hs_code
-    ]);
+    ];
+
+    if (hasCur) {
+      colList.push('currency');
+      valList.push(currency || 'USD');
+    }
+    if (hasWood) {
+      colList.push('wood_cbm');
+      valList.push(wood_cbm ? parseFloat(wood_cbm) : null);
+    }
+    if (hasDetails) {
+      colList.push('detail_pictures');
+      valList.push(detailPics && detailPics.length > 0 ? JSON.stringify(detailPics) : null);
+    }
+
+    const placeholders = colList.map(() => '?').join(', ');
+    const [result] = await db.execute(
+      `INSERT INTO products (${colList.join(', ')}) VALUES (${placeholders})`,
+      valList
+    );
 
     res.status(201).json({ 
       id: result.insertId, 
@@ -401,12 +539,13 @@ app.post('/api/products', upload.single('picture'), async (req, res) => {
 });
 
 // Update product
-app.put('/api/products/:id', upload.single('picture'), async (req, res) => {
+app.put('/api/products/:id', productUpload, async (req, res) => {
   try {
     const {
       client_code, client_barcode, client_description, km_code, description, folder_id, size_width, size_depth, size_height,
-      packing_width, packing_depth, packing_height, cbm, color,
-      gross_weight, net_weight, total_gw, total_nw, fob_price, total_price, hs_code
+      packing_width, packing_depth, packing_height, cbm, wood_cbm, color,
+      gross_weight, net_weight, total_gw, total_nw, fob_price, currency, total_price, hs_code,
+      existing_detail_pictures
     } = req.body;
 
     // Get current product to check for existing image
@@ -421,15 +560,35 @@ app.put('/api/products/:id', upload.single('picture'), async (req, res) => {
 
     let picture_url = currentProduct[0].picture_url;
     
-    // If new image uploaded, delete old one and use new one
-    if (req.file) {
+    const pictureFile = req.files && req.files['picture'] ? req.files['picture'][0] : (req.file || null);
+    if (pictureFile) {
       if (picture_url) {
         const oldImagePath = path.join(__dirname, picture_url);
         if (fs.existsSync(oldImagePath)) {
           fs.unlinkSync(oldImagePath);
         }
       }
-      picture_url = '/uploads-furniture/' + req.file.filename;
+      picture_url = '/uploads-furniture/' + pictureFile.filename;
+    }
+
+    let detailPics = [];
+    if (existing_detail_pictures) {
+      try {
+        detailPics = typeof existing_detail_pictures === 'string' ? JSON.parse(existing_detail_pictures) : existing_detail_pictures;
+      } catch {
+        detailPics = [];
+      }
+    } else if (currentProduct[0].detail_pictures) {
+      try {
+        detailPics = typeof currentProduct[0].detail_pictures === 'string' ? JSON.parse(currentProduct[0].detail_pictures) : currentProduct[0].detail_pictures;
+      } catch {
+        detailPics = [];
+      }
+    }
+    if (req.files && req.files['detail_pictures']) {
+      req.files['detail_pictures'].forEach((f) => {
+        detailPics.push('/uploads-furniture/' + f.filename);
+      });
     }
 
     // Auto-calculate CBM from packing dimensions: W x D x H / 1,000,000
@@ -457,15 +616,16 @@ app.put('/api/products/:id', upload.single('picture'), async (req, res) => {
         client_code = ?, client_barcode = ?, client_description = ?, km_code = ?, description = ?, folder_id = ?, picture_url = ?, 
         size_width = ?, size_depth = ?, size_height = ?,
         packing_width = ?, packing_depth = ?, packing_height = ?, 
-        cbm = ?, color = ?, gross_weight = ?, net_weight = ?, total_gw = ?, total_nw = ?,
-        fob_price = ?, total_price = ?, hs_code = ?,
+        cbm = ?, wood_cbm = ?, color = ?, gross_weight = ?, net_weight = ?, total_gw = ?, total_nw = ?,
+        fob_price = ?, currency = ?, total_price = ?, hs_code = ?, detail_pictures = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, [
       client_code || null, client_barcode || null, client_description || null, km_code, description || null, folder_id || null, picture_url, size_width, size_depth, size_height,
-      packing_width, packing_depth, packing_height, calculatedCBM || cbm, color,
+      packing_width, packing_depth, packing_height, calculatedCBM || cbm, wood_cbm ? parseFloat(wood_cbm) : null, color,
       gross_weight, net_weight, calculatedTotalGW || total_gw, calculatedTotalNW || total_nw || null, 
-      fob_price, calculatedTotalPrice || total_price, hs_code,
+      fob_price, currency || 'USD', calculatedTotalPrice || total_price, hs_code,
+      detailPics && detailPics.length > 0 ? JSON.stringify(detailPics) : null,
       req.params.id
     ]);
 
@@ -656,7 +816,7 @@ app.delete('/api/folders/:id', async (req, res) => {
 app.get('/api/orders', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = req.query.limit === 'all' || parseInt(req.query.limit) === -1 ? 10000 : (parseInt(req.query.limit) || 10);
     const search = req.query.search || '';
     const offset = (page - 1) * limit;
 
@@ -729,7 +889,7 @@ app.get('/api/orders/:id', async (req, res) => {
     if (order.custom_columns && typeof order.custom_columns === 'string') {
       try {
         order.custom_columns = JSON.parse(order.custom_columns);
-      } catch (e) {
+      } catch {
         order.custom_columns = [];
       }
     }
@@ -739,7 +899,7 @@ app.get('/api/orders/:id', async (req, res) => {
       if (item.custom_column_values && typeof item.custom_column_values === 'string') {
         try {
           item.custom_column_values = JSON.parse(item.custom_column_values);
-        } catch (e) {
+        } catch {
           item.custom_column_values = {};
         }
       }
@@ -860,8 +1020,9 @@ app.post('/api/orders', async (req, res) => {
         INSERT INTO order_items (
           order_id, product_id, client_code, qty, cbm_total, fob_total_usd,
           gross_weight_total, net_weight_total, total_gw_total, total_nw_total,
-          fob, custom_column_values, discount_5, discount_10
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          fob, custom_column_values, discount_5, discount_10,
+          door_count, drawer_count, hinge_price, blum_runner_price
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         orderId,
         nullIfUndefined(item.product_id),
@@ -876,7 +1037,11 @@ app.post('/api/orders', async (req, res) => {
         nullIfUndefined(item.fob),
         item.custom_column_values ? JSON.stringify(item.custom_column_values) : null,
         nullIfUndefined(item.discount_5),
-        nullIfUndefined(item.discount_10)
+        nullIfUndefined(item.discount_10),
+        nullIfUndefined(item.door_count),
+        nullIfUndefined(item.drawer_count),
+        nullIfUndefined(item.hinge_price),
+        nullIfUndefined(item.blum_runner_price)
       ]);
     }
 
@@ -981,8 +1146,9 @@ app.put('/api/orders/:id', async (req, res) => {
         INSERT INTO order_items (
           order_id, product_id, client_code, qty, cbm_total, fob_total_usd,
           gross_weight_total, net_weight_total, total_gw_total, total_nw_total,
-          fob, custom_column_values, discount_5, discount_10
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          fob, custom_column_values, discount_5, discount_10,
+          door_count, drawer_count, hinge_price, blum_runner_price
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         req.params.id,
         nullIfUndefined(item.product_id),
@@ -997,7 +1163,11 @@ app.put('/api/orders/:id', async (req, res) => {
         nullIfUndefined(item.fob),
         item.custom_column_values ? JSON.stringify(item.custom_column_values) : null,
         nullIfUndefined(item.discount_5),
-        nullIfUndefined(item.discount_10)
+        nullIfUndefined(item.discount_10),
+        nullIfUndefined(item.door_count),
+        nullIfUndefined(item.drawer_count),
+        nullIfUndefined(item.hinge_price),
+        nullIfUndefined(item.blum_runner_price)
       ]);
     }
 
@@ -1053,7 +1223,7 @@ app.get('/api/orders/:id/report', async (req, res) => {
     if (order.custom_columns && typeof order.custom_columns === 'string') {
       try {
         order.custom_columns = JSON.parse(order.custom_columns);
-      } catch (e) {
+      } catch {
         order.custom_columns = [];
       }
     }
@@ -1077,7 +1247,7 @@ app.get('/api/orders/:id/report', async (req, res) => {
       if (item.custom_column_values && typeof item.custom_column_values === 'string') {
         try {
           item.custom_column_values = JSON.parse(item.custom_column_values);
-        } catch (e) {
+        } catch {
           item.custom_column_values = {};
         }
       }
@@ -1637,7 +1807,65 @@ app.delete('/api/users/:id', async (req, res) => {
 });
 
 
+
+// Bank Accounts API Routes
+app.get('/api/bank-accounts', async (req, res) => {
+  try {
+    const [banks] = await db.execute('SELECT * FROM bank_accounts WHERE is_active = 1 ORDER BY id ASC');
+    res.json({ banks });
+  } catch (error) {
+    handleDbError(error, res, 'fetch bank accounts');
+  }
+});
+
+app.post('/api/bank-accounts', async (req, res) => {
+  try {
+    const { name, bank_name, account_name, account, account_currency, swift_code, address } = req.body;
+    if (!name || !account) {
+      return res.status(400).json({ error: 'Nama rekening dan nomor rekening wajib diisi' });
+    }
+    const bank_key = (name || 'bank').toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now();
+    const [result] = await db.execute(
+      'INSERT INTO bank_accounts (bank_key, name, bank_name, account_name, account, account_currency, swift_code, address, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)',
+      [bank_key, name.trim(), bank_name?.trim() || null, account_name?.trim() || 'CV KAYU MANIS', account.trim(), account_currency?.trim() || null, swift_code?.trim() || null, address?.trim() || null]
+    );
+    res.status(201).json({
+      id: result.insertId,
+      bank_key,
+      name: name.trim(),
+      account: account.trim(),
+      message: 'Bank account added successfully'
+    });
+  } catch (error) {
+    handleDbError(error, res, 'create bank account');
+  }
+});
+
+// Terms of Payment API Routes
+app.get('/api/terms-of-payment', async (req, res) => {
+  try {
+    const [terms] = await db.execute('SELECT * FROM terms_of_payment WHERE is_active = 1 ORDER BY id ASC');
+    res.json({ terms: terms.map((t) => t.name) });
+  } catch (error) {
+    handleDbError(error, res, 'fetch terms of payment');
+  }
+});
+
+app.post('/api/terms-of-payment', async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Terms of payment name is required' });
+    }
+    await db.execute('INSERT IGNORE INTO terms_of_payment (name, is_active) VALUES (?, 1)', [name.trim()]);
+    res.status(201).json({ message: 'Terms of payment added successfully', name: name.trim() });
+  } catch (error) {
+    handleDbError(error, res, 'create terms of payment');
+  }
+});
+
 // Error handling middleware
+// eslint-disable-next-line no-unused-vars
 app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {

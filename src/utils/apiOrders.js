@@ -61,6 +61,44 @@ export const ordersAPI = {
     }
   },
 
+  // Bank accounts
+  getBankAccounts: async () => {
+    try {
+      const response = await api.get('/bank-accounts');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  createBankAccount: async (bankData) => {
+    try {
+      const response = await api.post('/bank-accounts', bankData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Terms of payment
+  getTermsOfPayment: async () => {
+    try {
+      const response = await api.get('/terms-of-payment');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  createTermsOfPayment: async (termData) => {
+    try {
+      const response = await api.post('/terms-of-payment', termData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
   // Get order report data
   getOrderReport: async (id) => {
     try {

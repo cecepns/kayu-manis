@@ -8,6 +8,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import Pagination from '../../components/common/Pagination';
 import SearchBar from '../../components/common/SearchBar';
 import ImageLightbox from '../../components/common/ImageLightbox';
+import QrScanModal from '../../components/common/QrScanModal';
 import { getImageUrl } from '../../utils/imageUtils';
 import { isMenuEditor, canViewPrice, hasMenuAccess, getAllowedFolderIds, isFolderAllowed } from '../../utils/auth';
 
@@ -24,10 +25,12 @@ const ProductList = () => {
   const [loading, setLoading] = useState(false);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
-  const itemsPerPage = 10;
+  const itemsPerPage = 1000; // Continuous 1-page display
   const previousSearchTermRef = useRef(searchTerm);
   const isFirstLoad = useRef(true);
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [selectedQuantities, setSelectedQuantities] = useState({});
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
 
   const allowedFolderIds = getAllowedFolderIds();
@@ -176,10 +179,25 @@ const ProductList = () => {
   const toggleSelect = (productId) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(productId)) next.delete(productId);
-      else next.add(productId);
+      if (next.has(productId)) {
+        next.delete(productId);
+      } else {
+        next.add(productId);
+        setSelectedQuantities((q) => ({
+          ...q,
+          [productId]: q[productId] || 1
+        }));
+      }
       return next;
     });
+  };
+
+  const handleQtyChange = (productId, val) => {
+    const qty = Math.max(1, parseInt(val, 10) || 1);
+    setSelectedQuantities((prev) => ({
+      ...prev,
+      [productId]: qty
+    }));
   };
 
   const toggleSelectAll = () => {
@@ -187,16 +205,30 @@ const ProductList = () => {
       setSelectedIds(new Set());
     } else {
       setSelectedIds(new Set(products.map((p) => p.id)));
+      setSelectedQuantities((prev) => {
+        const next = { ...prev };
+        products.forEach((p) => {
+          if (!next[p.id]) next[p.id] = 1;
+        });
+        return next;
+      });
     }
   };
 
   const handleAddToNewOrder = () => {
     if (selectedIds.size === 0) {
-      alert('Select at least one product');
+      alert('Pilih minimal satu produk');
       return;
     }
+    const selectedItems = Array.from(selectedIds).map((id) => ({
+      productId: id,
+      qty: parseInt(selectedQuantities[id], 10) || 1
+    }));
     navigate('/app/orders/new', {
-      state: { productIds: Array.from(selectedIds) },
+      state: {
+        productIds: Array.from(selectedIds),
+        selectedItems
+      },
     });
   };
 
@@ -271,13 +303,24 @@ const ProductList = () => {
 
       {/* Search and Filters */}
       <div className="card min-w-0">
-        <div className="flex flex-col sm:flex-row gap-4 min-w-0">
-          <SearchBar 
-            onSearch={handleSearch}
-            placeholder="Search by KM Code, client code, description..."
-            className="flex-1"
-            initialValue={searchTerm}
-          />
+        <div className="flex flex-col sm:flex-row gap-3 min-w-0">
+          <div className="flex-1 flex gap-2">
+            <SearchBar 
+              onSearch={handleSearch}
+              placeholder="Search by KM Code, client code, description..."
+              className="flex-1"
+              initialValue={searchTerm}
+            />
+            <button
+              type="button"
+              onClick={() => setIsQrModalOpen(true)}
+              className="btn-secondary px-3 py-2 text-primary-700 bg-primary-50 hover:bg-primary-100 border-primary-200 inline-flex items-center gap-1.5 shrink-0"
+              title="Scan QR / Barcode untuk pencarian"
+            >
+              <QrCode className="w-4 h-4" />
+              <span className="hidden sm:inline text-xs font-medium">Scan QR</span>
+            </button>
+          </div>
           <select
             value={singleAllowedFolderId || selectedFolderId}
             onChange={(e) => setSelectedFolderId(e.target.value)}
@@ -364,12 +407,27 @@ const ProductList = () => {
                   {products.map((product) => (
                     <tr key={product.id} className={`hover:bg-gray-50 ${selectedIds.has(product.id) ? 'bg-primary-50/50' : ''}`}>
                       <td className="px-3 py-4 text-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(product.id)}
-                          onChange={() => toggleSelect(product.id)}
-                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                        />
+                        <div className="flex flex-col items-center gap-1">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(product.id)}
+                            onChange={() => toggleSelect(product.id)}
+                            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          />
+                          {selectedIds.has(product.id) && (
+                            <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                              <span className="text-[10px] text-gray-500">Qty:</span>
+                              <input
+                                type="number"
+                                min="1"
+                                value={selectedQuantities[product.id] ?? 1}
+                                onChange={(e) => handleQtyChange(product.id, e.target.value)}
+                                className="w-12 text-center text-xs py-0.5 px-1 border border-primary-400 rounded focus:ring-1 focus:ring-primary-500 bg-white"
+                                title="Qty for order"
+                              />
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 lg:px-6 py-4">
                         <div className="flex items-center">
@@ -436,7 +494,12 @@ const ProductList = () => {
                       </td>
                       {showPrice && (
                         <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {product.fob_price}
+                          {product.fob_price ? (
+                            <span className="inline-flex items-center gap-1">
+                              <span>{product.fob_price}</span>
+                              <span className="text-xs text-gray-500 font-normal">{product.currency || 'USD'}</span>
+                            </span>
+                          ) : '-'}
                         </td>
                       )}
                       <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-center">
@@ -482,13 +545,19 @@ const ProductList = () => {
               </table>
             </div>
             
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              totalItems={totalItems}
-              itemsPerPage={itemsPerPage}
-              onPageChange={setCurrentPage}
-            />
+            {totalPages > 1 ? (
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                itemsPerPage={itemsPerPage}
+                onPageChange={setCurrentPage}
+              />
+            ) : (
+              <div className="p-3 text-center text-xs text-gray-500 border-t border-gray-100">
+                Menampilkan semua {products.length} produk
+              </div>
+            )}
           </>
         )}
       </div>
@@ -510,12 +579,25 @@ const ProductList = () => {
             {products.map((product) => (
               <div key={product.id} className={`card ${selectedIds.has(product.id) ? 'ring-2 ring-primary-300' : ''}`}>
                 <div className="flex items-start space-x-4">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(product.id)}
-                    onChange={() => toggleSelect(product.id)}
-                    className="mt-2 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                  />
+                  <div className="flex flex-col items-center gap-1 shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(product.id)}
+                      onChange={() => toggleSelect(product.id)}
+                      className="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                    />
+                    {selectedIds.has(product.id) && (
+                      <input
+                        type="number"
+                        min="1"
+                        value={selectedQuantities[product.id] ?? 1}
+                        onChange={(e) => handleQtyChange(product.id, e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-12 text-center text-xs py-0.5 px-1 border border-primary-400 rounded focus:ring-1 focus:ring-primary-500 bg-white"
+                        title="Qty"
+                      />
+                    )}
+                  </div>
                   <div className="flex-shrink-0">
                     {product.picture_url ? (
                       <button
@@ -626,7 +708,9 @@ const ProductList = () => {
                       {showPrice && (
                         <div>
                           <span className="text-gray-500">FOB:</span>
-                          <span className="ml-1 text-gray-900 font-medium">{product.fob_price}</span>
+                          <span className="ml-1 text-gray-900 font-medium">
+                            {product.fob_price ? `${product.fob_price} ${product.currency || 'USD'}` : '-'}
+                          </span>
                         </div>
                       )}
                     </div>
@@ -635,13 +719,19 @@ const ProductList = () => {
               </div>
             ))}
             
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              totalItems={totalItems}
-              itemsPerPage={itemsPerPage}
-              onPageChange={setCurrentPage}
-            />
+            {totalPages > 1 ? (
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                itemsPerPage={itemsPerPage}
+                onPageChange={setCurrentPage}
+              />
+            ) : (
+              <div className="p-3 text-center text-xs text-gray-500">
+                Menampilkan semua {products.length} produk
+              </div>
+            )}
           </>
         )}
       </div>
@@ -654,6 +744,12 @@ const ProductList = () => {
           onClose={() => setLightboxImage(null)}
         />
       )}
+
+      <QrScanModal
+        isOpen={isQrModalOpen}
+        onClose={() => setIsQrModalOpen(false)}
+        onScan={(code) => handleSearch(code)}
+      />
     </div>
   );
 };

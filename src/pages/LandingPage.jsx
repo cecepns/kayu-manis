@@ -1,6 +1,5 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
-import { Package, ShoppingCart, FileText, ArrowRight, CircleCheck as CheckCircle, Users, TrendingUp, Shield } from 'lucide-react';
+import { Package, ShoppingCart, FileText, ArrowRight, CircleCheck as CheckCircle, TrendingUp, Shield } from 'lucide-react';
 
 const LandingPage = () => {
   const features = [
@@ -171,7 +170,7 @@ const LandingPage = () => {
               </h2>
               <p className="text-lg text-gray-600 mb-8">
                 Built specifically for furniture businesses, our platform offers specialized 
-                features that understand your industry's unique requirements.
+                features that understand your industry&apos;s unique requirements.
               </p>
               
               <div className="space-y-4">

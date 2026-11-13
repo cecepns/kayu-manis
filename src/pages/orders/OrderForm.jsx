@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { ArrowLeft, Plus, Trash2, Package } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Package, Save, X, Building2 } from "lucide-react";
 import Select from "react-select";
 import CreatableSelect from "react-select/creatable";
 import { ordersAPI } from "../../utils/apiOrders";
@@ -56,13 +56,25 @@ const OrderForm = () => {
   const location = useLocation();
   const { id } = useParams();
   const isEdit = Boolean(id);
-  const prefillProductIds = location.state?.productIds;
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [products, setProducts] = useState([]);
   const [productOptions, setProductOptions] = useState([]);
   const [buyerOptions, setBuyerOptions] = useState([]);
+  const [savingBuyer, setSavingBuyer] = useState(false);
+  const [bankAccounts, setBankAccounts] = useState(BANK_OPTIONS);
+  const [isBankModalOpen, setIsBankModalOpen] = useState(false);
+  const [newBank, setNewBank] = useState({
+    name: "",
+    bank_name: "",
+    account_name: "CV KAYU MANIS",
+    account: "",
+    account_currency: "USD",
+    swift_code: "",
+    address: ""
+  });
+  const [termsOptions, setTermsOptions] = useState(TERMS_OF_PAYMENT_OPTIONS);
   const productSearchTimeoutRef = useRef(null);
   const buyerSearchTimeoutRef = useRef(null);
 
@@ -96,8 +108,12 @@ const OrderForm = () => {
         gross_weight_total: 0,
         net_weight_total: 0,
         total_gw_total: 0,
-        discount_5: 0, // 0 = No discount, 5 = 5% discount (multiply by 0.95), 10 = 10% discount (multiply by 0.90)
-        discount_10: null, // Not used anymore, kept for backward compatibility
+        discount_5: 0,
+        discount_10: null,
+        door_count: "",
+        drawer_count: "",
+        hinge_price: "",
+        blum_runner_price: "",
         custom_column_values: {},
       },
     ],
@@ -121,6 +137,103 @@ const OrderForm = () => {
       console.error("Error loading products:", error);
     }
   }, []);
+
+  const loadBankAccounts = useCallback(async () => {
+    try {
+      const res = await ordersAPI.getBankAccounts();
+      if (res?.bank_accounts && res.bank_accounts.length > 0) {
+        const mapped = res.bank_accounts.map((b) => ({
+          id: b.bank_key || String(b.id),
+          name: b.name,
+          bankName: b.bank_name || "",
+          accountName: b.account_name || "CV KAYU MANIS",
+          account: b.account,
+          accountCurrency: b.account_currency || "",
+          swiftCode: b.swift_code || "",
+          address: b.address || ""
+        }));
+        setBankAccounts(mapped);
+      }
+    } catch (err) {
+      console.warn("Could not load bank accounts from API:", err);
+    }
+  }, []);
+
+  const loadTermsOfPayment = useCallback(async () => {
+    try {
+      const res = await ordersAPI.getTermsOfPayment();
+      if (res?.terms && res.terms.length > 0) {
+        const combined = Array.from(new Set([...DEFAULT_TERMS_OF_PAYMENT, ...res.terms]));
+        setTermsOptions(combined.map((t) => ({ value: t, label: t })));
+      }
+    } catch (err) {
+      console.warn("Could not load terms of payment from API:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadBankAccounts();
+    loadTermsOfPayment();
+  }, [loadBankAccounts, loadTermsOfPayment]);
+
+  const handleCreateBankAccount = async (e) => {
+    e.preventDefault();
+    if (!newBank.name || !newBank.account) {
+      alert("Nama rekening dan nomor rekening wajib diisi");
+      return;
+    }
+    try {
+      const created = await ordersAPI.createBankAccount(newBank);
+      await loadBankAccounts();
+      if (created.bank_key) {
+        setOrderData((prev) => ({ ...prev, bank_id: created.bank_key }));
+      }
+      setIsBankModalOpen(false);
+      setNewBank({
+        name: "",
+        bank_name: "",
+        account_name: "CV KAYU MANIS",
+        account: "",
+        account_currency: "USD",
+        swift_code: "",
+        address: ""
+      });
+      alert("Rekening bank berhasil ditambahkan!");
+    } catch (err) {
+      alert(err?.error || err?.message || "Gagal menambahkan rekening bank");
+    }
+  };
+
+  const handleCreateTerm = async (newTerm) => {
+    try {
+      await ordersAPI.createTermsOfPayment({ name: newTerm });
+      setTermsOptions((prev) => [...prev, { value: newTerm, label: newTerm }]);
+      setOrderData((prev) => ({ ...prev, terms_of_payment: newTerm }));
+    } catch {
+      setTermsOptions((prev) => [...prev, { value: newTerm, label: newTerm }]);
+      setOrderData((prev) => ({ ...prev, terms_of_payment: newTerm }));
+    }
+  };
+
+  const handleSaveBuyerToMaster = async () => {
+    if (!orderData.buyer_name?.trim()) {
+      alert("Nama buyer tidak boleh kosong");
+      return;
+    }
+    try {
+      setSavingBuyer(true);
+      await buyersAPI.createBuyer({
+        name: orderData.buyer_name.trim(),
+        address: orderData.buyer_address?.trim() || ""
+      });
+      await loadBuyers();
+      alert(`Buyer "${orderData.buyer_name}" berhasil disimpan ke Master Buyer!`);
+    } catch (err) {
+      alert(err?.error || err?.message || "Gagal menyimpan buyer");
+    } finally {
+      setSavingBuyer(false);
+    }
+  };
 
   const loadBuyers = useCallback(async (search = "") => {
     try {
@@ -228,8 +341,12 @@ const OrderForm = () => {
           ? orderItems.map((item) => ({
               ...item,
               product_id: item.product_id ? String(item.product_id) : "",
-              discount_5: item.discount_5 !== null && item.discount_5 !== undefined ? parseInt(item.discount_5) || 0 : 0, // 0 = No discount, 5 = 5%, 10 = 10%
-              discount_10: null, // Not used anymore
+              discount_5: item.discount_5 !== null && item.discount_5 !== undefined ? parseInt(item.discount_5) || 0 : 0,
+              discount_10: null,
+              door_count: item.door_count ?? "",
+              drawer_count: item.drawer_count ?? "",
+              hinge_price: item.hinge_price ?? "",
+              blum_runner_price: item.blum_runner_price ?? "",
               custom_column_values: item.custom_column_values
                 ? typeof item.custom_column_values === "string"
                   ? JSON.parse(item.custom_column_values)
@@ -309,24 +426,49 @@ const OrderForm = () => {
       fob: product.fob_price || "",
       discount_5: 0,
       discount_10: null,
+      door_count: "",
+      drawer_count: "",
+      hinge_price: "",
+      blum_runner_price: "",
       custom_column_values: {},
     };
   }, []);
 
   useEffect(() => {
-    if (isEdit || !prefillProductIds?.length) return;
+    if (isEdit) return;
+    const prefillSelectedItems = location.state?.selectedItems;
+    const prefillProductIds = location.state?.productIds;
+    if (!prefillSelectedItems?.length && !prefillProductIds?.length) return;
     let cancelled = false;
 
     const prefillFromProducts = async () => {
       try {
         const items = [];
         const loadedProducts = [];
-        for (const productId of prefillProductIds) {
-          const product = await productsAPI.getProduct(productId);
-          if (cancelled) return;
-          loadedProducts.push(product);
-          items.push(buildItemFromProduct(product));
+        let detectedCurrency = null;
+
+        if (prefillSelectedItems && prefillSelectedItems.length > 0) {
+          for (const item of prefillSelectedItems) {
+            const product = await productsAPI.getProduct(item.productId);
+            if (cancelled) return;
+            loadedProducts.push(product);
+            if (!detectedCurrency && product.currency) {
+              detectedCurrency = product.currency;
+            }
+            items.push(buildItemFromProduct(product, item.qty));
+          }
+        } else if (prefillProductIds && prefillProductIds.length > 0) {
+          for (const productId of prefillProductIds) {
+            const product = await productsAPI.getProduct(productId);
+            if (cancelled) return;
+            loadedProducts.push(product);
+            if (!detectedCurrency && product.currency) {
+              detectedCurrency = product.currency;
+            }
+            items.push(buildItemFromProduct(product, 1));
+          }
         }
+
         if (cancelled) return;
         setProducts((prev) => {
           const map = new Map(prev.map((p) => [p.id, p]));
@@ -335,6 +477,7 @@ const OrderForm = () => {
         });
         setOrderData((prev) => ({
           ...prev,
+          currency: detectedCurrency || prev.currency || "USD",
           items: items.length > 0 ? items : prev.items,
         }));
       } catch (error) {
@@ -346,7 +489,7 @@ const OrderForm = () => {
     return () => {
       cancelled = true;
     };
-  }, [isEdit, prefillProductIds, buildItemFromProduct]);
+  }, [isEdit, location.state, buildItemFromProduct]);
 
   useEffect(() => {
     return () => {
@@ -827,6 +970,10 @@ const OrderForm = () => {
         fob: nullIfEmpty(item.fob),
         discount_5: nullIfUndefined(item.discount_5),
         discount_10: nullIfUndefined(item.discount_10),
+        door_count: item.door_count !== "" && item.door_count !== null && item.door_count !== undefined ? parseInt(item.door_count, 10) : null,
+        drawer_count: item.drawer_count !== "" && item.drawer_count !== null && item.drawer_count !== undefined ? parseInt(item.drawer_count, 10) : null,
+        hinge_price: item.hinge_price !== "" && item.hinge_price !== null && item.hinge_price !== undefined ? parseFloat(item.hinge_price) : null,
+        blum_runner_price: item.blum_runner_price !== "" && item.blum_runner_price !== null && item.blum_runner_price !== undefined ? parseFloat(item.blum_runner_price) : null,
         custom_column_values:
           item.custom_column_values &&
           Object.keys(item.custom_column_values).length > 0
@@ -957,12 +1104,24 @@ const OrderForm = () => {
               />
             </div>
             <div className="md:col-span-2">
-              <label
-                htmlFor="buyer_address"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Buyer Address <span className="text-red-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label
+                  htmlFor="buyer_address"
+                  className="block text-sm font-medium text-gray-700"
+                >
+                  Buyer Address <span className="text-red-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={handleSaveBuyerToMaster}
+                  disabled={savingBuyer || !orderData.buyer_name?.trim()}
+                  className="btn-secondary text-xs py-1 px-2.5 inline-flex items-center gap-1 text-primary-700 bg-primary-50 hover:bg-primary-100 border-primary-200 disabled:opacity-50"
+                  title="Simpan nama & alamat ini ke Master Data Buyer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{savingBuyer ? "Menyimpan..." : "Simpan ke Master Buyer"}</span>
+                </button>
+              </div>
               <textarea
                 id="buyer_address"
                 name="buyer_address"
@@ -971,8 +1130,7 @@ const OrderForm = () => {
                 required
                 rows={3}
                 className="input-field"
-                placeholder="Buyer address will be auto-filled when buyer is selected"
-                readOnly
+                placeholder="Ketik atau edit alamat buyer untuk pesanan ini..."
               />
             </div>
             <div>
@@ -994,24 +1152,19 @@ const OrderForm = () => {
             </div>
             <div>
               <label
-                htmlFor="currency"
                 className="block text-sm font-medium text-gray-700 mb-1"
               >
-                Currency <span className="text-red-500">*</span>
+                Currency
               </label>
-              <select
-                id="currency"
-                name="currency"
-                value={orderData.currency}
-                onChange={handleOrderInfoChange}
-                required
-                className="input-field"
-              >
-                <option value="USD">USD ($)</option>
-                <option value="EUR">EUR (€)</option>
-                <option value="Rp">Rp (Rp)</option>
-                <option value="IDR">IDR (Rp)</option>
-              </select>
+              <div className="input-field bg-gray-50 flex items-center justify-between">
+                <span className="font-semibold text-gray-800">
+                  {orderData.currency || "USD"}
+                </span>
+                <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded">
+                  Otomatis dari Master Produk
+                </span>
+              </div>
+              <input type="hidden" name="currency" value={orderData.currency || "USD"} />
             </div>
             {!isEdit && (
               <div>
@@ -1033,6 +1186,9 @@ const OrderForm = () => {
                   <option value="special">
                     Special Template (with discounts)
                   </option>
+                  <option value="iemanja">
+                    Special Template &quot;Iemanja&quot;
+                  </option>
                 </select>
                 {orderData.template_type === "special" && (
                   <p className="text-xs text-gray-500 mt-1">
@@ -1048,7 +1204,9 @@ const OrderForm = () => {
                   Excel Template Type
                 </label>
                 <div className="input-field bg-gray-100 cursor-not-allowed">
-                  {orderData.template_type === "special"
+                  {orderData.template_type === "iemanja"
+                    ? 'Special Template "Iemanja"'
+                    : orderData.template_type === "special"
                     ? "Special Template"
                     : "Normal Template"}
                 </div>
@@ -1320,6 +1478,83 @@ const OrderForm = () => {
                     </div>
                   </div>
 
+                  {/* Special fields for Template Iemanja */}
+                  {orderData.template_type === "iemanja" && selectedProduct && (
+                    <div className="mt-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-purple-900 mb-3">
+                        Spesifikasi Khusus (Template Iemanja)
+                      </h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Jumlah Pintu
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={item.door_count ?? ""}
+                            onChange={(e) =>
+                              handleItemChange(index, "door_count", e.target.value)
+                            }
+                            onWheel={handleNumberInputWheel}
+                            placeholder="0"
+                            className="input-field text-xs py-1.5"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Jumlah Laci
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={item.drawer_count ?? ""}
+                            onChange={(e) =>
+                              handleItemChange(index, "drawer_count", e.target.value)
+                            }
+                            onWheel={handleNumberInputWheel}
+                            placeholder="0"
+                            className="input-field text-xs py-1.5"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Harga Engsel
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={item.hinge_price ?? ""}
+                            onChange={(e) =>
+                              handleItemChange(index, "hinge_price", e.target.value)
+                            }
+                            onWheel={handleNumberInputWheel}
+                            placeholder="0.00"
+                            className="input-field text-xs py-1.5"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Harga Rel BLUM
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={item.blum_runner_price ?? ""}
+                            onChange={(e) =>
+                              handleItemChange(index, "blum_runner_price", e.target.value)
+                            }
+                            onWheel={handleNumberInputWheel}
+                            placeholder="0.00"
+                            className="input-field text-xs py-1.5"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Discount dropdown for special template */}
                   {orderData.template_type === "special" && selectedProduct && (
                     <div className="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
@@ -1544,7 +1779,7 @@ const OrderForm = () => {
                 inputId="terms_of_payment"
                 value={getCreatableSelectValue(
                   orderData.terms_of_payment,
-                  TERMS_OF_PAYMENT_OPTIONS
+                  termsOptions
                 )}
                 onChange={(selectedOption) =>
                   setOrderData((prev) => ({
@@ -1554,15 +1789,8 @@ const OrderForm = () => {
                       : "",
                   }))
                 }
-                onCreateOption={(inputValue) => {
-                  const manualValue = inputValue.trim();
-                  if (!manualValue) return;
-                  setOrderData((prev) => ({
-                    ...prev,
-                    terms_of_payment: manualValue,
-                  }));
-                }}
-                options={TERMS_OF_PAYMENT_OPTIONS}
+                onCreateOption={handleCreateTerm}
+                options={termsOptions}
                 isClearable
                 isSearchable
                 createOptionPosition="first"
@@ -1640,9 +1868,19 @@ const OrderForm = () => {
               />
             </div>
             <div className="md:col-span-2">
-              <label htmlFor="bank_id" className="block text-sm font-medium text-gray-700 mb-1">
-                Bank
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="bank_id" className="block text-sm font-medium text-gray-700">
+                  Bank
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsBankModalOpen(true)}
+                  className="btn-secondary text-xs py-1 px-2.5 inline-flex items-center gap-1 text-primary-700 bg-primary-50 hover:bg-primary-100 border-primary-200"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tambah Rekening</span>
+                </button>
+              </div>
               <select
                 id="bank_id"
                 name="bank_id"
@@ -1650,14 +1888,15 @@ const OrderForm = () => {
                 onChange={handleOrderInfoChange}
                 className="input-field"
               >
-                {BANK_OPTIONS.map((bank) => (
+                {bankAccounts.map((bank) => (
                   <option key={bank.id} value={bank.id}>
                     {bank.name}
                   </option>
                 ))}
               </select>
               {(() => {
-                const bank = BANK_OPTIONS.find((b) => b.id === orderData.bank_id) || BANK_OPTIONS[0];
+                const bank = bankAccounts.find((b) => b.id === orderData.bank_id) || bankAccounts[0];
+                if (!bank) return null;
                 return (
                   <div className="mt-3 p-3 bg-gray-50 rounded-lg text-sm space-y-1 text-gray-700">
                     <p><span className="font-semibold text-blue-800">BANK</span> : {bank.name}</p>
@@ -1739,6 +1978,140 @@ const OrderForm = () => {
           </button>
         </div>
       </form>
+
+      {/* Modal Tambah Rekening Bank */}
+      {isBankModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-primary-100 text-primary-700 flex items-center justify-center">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 text-base">Tambah Rekening Bank</h3>
+                  <p className="text-xs text-gray-500">Tambahkan detail rekening baru untuk invoice</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBankModalOpen(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateBankAccount} className="p-5 space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Nama Label Rekening <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: BCA USD, MANDIRI EUR"
+                  value={newBank.name}
+                  onChange={(e) => setNewBank({ ...newBank, name: e.target.value })}
+                  className="input-field text-xs"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Nama Bank
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Bank Central Asia"
+                    value={newBank.bank_name}
+                    onChange={(e) => setNewBank({ ...newBank, bank_name: e.target.value })}
+                    className="input-field text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Mata Uang
+                  </label>
+                  <select
+                    value={newBank.account_currency}
+                    onChange={(e) => setNewBank({ ...newBank, account_currency: e.target.value })}
+                    className="input-field text-xs"
+                  >
+                    <option value="USD">USD</option>
+                    <option value="EURO">EURO</option>
+                    <option value="IDR">IDR</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Nama Pemilik Rekening <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: CV KAYU MANIS"
+                  value={newBank.account_name}
+                  onChange={(e) => setNewBank({ ...newBank, account_name: e.target.value })}
+                  className="input-field text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Nomor Rekening <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: 123456789"
+                  value={newBank.account}
+                  onChange={(e) => setNewBank({ ...newBank, account: e.target.value })}
+                  className="input-field text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  SWIFT Code
+                </label>
+                <input
+                  type="text"
+                  placeholder="Contoh: CENAIDJA"
+                  value={newBank.swift_code}
+                  onChange={(e) => setNewBank({ ...newBank, swift_code: e.target.value })}
+                  className="input-field text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Alamat Bank
+                </label>
+                <input
+                  type="text"
+                  placeholder="Contoh: JL BRIGJEND KATAMSO, YOGYAKARTA, INDONESIA"
+                  value={newBank.address}
+                  onChange={(e) => setNewBank({ ...newBank, address: e.target.value })}
+                  className="input-field text-xs"
+                />
+              </div>
+              <div className="pt-3 flex justify-end gap-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsBankModalOpen(false)}
+                  className="btn-secondary text-xs py-2 px-3"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary text-xs py-2 px-4"
+                >
+                  Simpan Rekening
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -44,6 +44,12 @@ export const productsAPI = {
       Object.keys(productData).forEach(key => {
         if (key === 'picture' && productData[key]) {
           formData.append('picture', productData[key]);
+        } else if (key === 'detail_pictures' && Array.isArray(productData[key])) {
+          productData[key].forEach((file) => {
+            if (file instanceof File || file instanceof Blob) {
+              formData.append('detail_pictures', file);
+            }
+          });
         } else if (productData[key] !== null && productData[key] !== undefined) {
           formData.append(key, productData[key]);
         }
@@ -68,6 +74,12 @@ export const productsAPI = {
       Object.keys(productData).forEach(key => {
         if (key === 'picture' && productData[key]) {
           formData.append('picture', productData[key]);
+        } else if (key === 'detail_pictures' && Array.isArray(productData[key])) {
+          productData[key].forEach((file) => {
+            if (file instanceof File || file instanceof Blob) {
+              formData.append('detail_pictures', file);
+            }
+          });
         } else if (productData[key] !== null && productData[key] !== undefined) {
           formData.append(key, productData[key]);
         }
