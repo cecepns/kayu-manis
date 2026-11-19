@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { X, Camera, QrCode, AlertCircle, Upload } from 'lucide-react';
+import { productsAPI } from '../../utils/apiProducts';
 
 const QrScanModal = ({ isOpen, onClose, onScan }) => {
   const [manualCode, setManualCode] = useState('');
@@ -10,17 +11,6 @@ const QrScanModal = ({ isOpen, onClose, onScan }) => {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const scanIntervalRef = useRef(null);
-
-  const cleanDecodedValue = (rawValue) => {
-    if (!rawValue) return '';
-    const trimmed = rawValue.trim();
-    // If it's a URL ending in /public/product/:id
-    const match = trimmed.match(/\/public\/product\/([a-zA-Z0-9_-]+)/);
-    if (match && match[1]) {
-      return match[1];
-    }
-    return trimmed;
-  };
 
   const stopCamera = useCallback(() => {
     if (scanIntervalRef.current) {
@@ -34,13 +24,30 @@ const QrScanModal = ({ isOpen, onClose, onScan }) => {
     setScanning(false);
   }, []);
 
-  const handleDetected = useCallback((text) => {
-    const cleaned = cleanDecodedValue(text);
-    if (cleaned) {
-      stopCamera();
-      onScan(cleaned);
-      onClose();
+  const handleDetected = useCallback(async (text) => {
+    if (!text) return;
+    const trimmed = text.trim();
+    stopCamera();
+    onClose();
+
+    // If it's a public product URL /public/product/:id, resolve to KM Code
+    const match = trimmed.match(/\/public\/product\/([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      const prodId = match[1];
+      try {
+        const prod = await productsAPI.getProduct(prodId);
+        if (prod && prod.km_code) {
+          onScan(prod.km_code);
+          return;
+        }
+      } catch (e) {
+        console.warn('Could not resolve product ID from QR to km_code:', e);
+      }
+      onScan(prodId);
+      return;
     }
+
+    onScan(trimmed);
   }, [onClose, onScan, stopCamera]);
 
   const startCamera = useCallback(async () => {

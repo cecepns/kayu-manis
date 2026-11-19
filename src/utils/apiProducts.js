@@ -11,12 +11,15 @@ const api = axios.create({
 
 // Products API
 export const productsAPI = {
-  // Get all products with pagination and search
-  getProducts: async (page = 1, limit = 10, search = '', folderId = '') => {
+  // Get all products with pagination, search, folder filter, and price sort
+  getProducts: async (page = 1, limit = 10, search = '', folderId = '', sortPrice = null) => {
     try {
-      let url = `/products?page=${page}&limit=${limit}&search=${search}`;
+      let url = `/products?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`;
       if (folderId) {
-        url += `&folder_id=${folderId}`;
+        url += `&folder_id=${encodeURIComponent(folderId)}`;
+      }
+      if (sortPrice) {
+        url += `&sortPrice=${encodeURIComponent(sortPrice)}`;
       }
       const response = await api.get(url);
       return response.data;

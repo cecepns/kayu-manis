@@ -216,18 +216,24 @@ const OrderForm = () => {
   };
 
   const handleSaveBuyerToMaster = async () => {
-    if (!orderData.buyer_name?.trim()) {
+    const trimmedName = orderData.buyer_name?.trim();
+    const trimmedAddress = orderData.buyer_address?.trim();
+    if (!trimmedName) {
       alert("Nama buyer tidak boleh kosong");
+      return;
+    }
+    if (!trimmedAddress) {
+      alert("Alamat buyer tidak boleh kosong jika ingin disimpan ke Master Buyer");
       return;
     }
     try {
       setSavingBuyer(true);
       await buyersAPI.createBuyer({
-        name: orderData.buyer_name.trim(),
-        address: orderData.buyer_address?.trim() || ""
+        name: trimmedName,
+        address: trimmedAddress,
       });
       await loadBuyers();
-      alert(`Buyer "${orderData.buyer_name}" berhasil disimpan ke Master Buyer!`);
+      alert(`Buyer "${trimmedName}" dan alamat berhasil disimpan ke Master Buyer!`);
     } catch (err) {
       alert(err?.error || err?.message || "Gagal menyimpan buyer");
     } finally {
@@ -396,8 +402,8 @@ const OrderForm = () => {
     }
   }, [isEdit, id, loadOrder]);
 
-  const buildItemFromProduct = useCallback((product) => {
-    const qty = 1;
+  const buildItemFromProduct = useCallback((product, customQty = 1) => {
+    const qty = Math.max(1, parseInt(customQty, 10) || 1);
     const fobPrice = parseFloat(product.fob_price) || 0;
     let cbmTotal = 0;
     if (product.packing_width && product.packing_depth && product.packing_height) {
@@ -511,12 +517,20 @@ const OrderForm = () => {
   };
 
   const handleBuyerChange = (selectedOption) => {
-    if (selectedOption && selectedOption.buyer) {
-      setOrderData((prev) => ({
-        ...prev,
-        buyer_name: selectedOption.buyer.name,
-        buyer_address: selectedOption.buyer.address,
-      }));
+    if (selectedOption) {
+      if (selectedOption.buyer) {
+        setOrderData((prev) => ({
+          ...prev,
+          buyer_name: selectedOption.buyer.name,
+          buyer_address: selectedOption.buyer.address || "",
+        }));
+      } else {
+        // Creatable manual input
+        setOrderData((prev) => ({
+          ...prev,
+          buyer_name: selectedOption.label || selectedOption.value || "",
+        }));
+      }
     } else {
       setOrderData((prev) => ({
         ...prev,
@@ -524,6 +538,15 @@ const OrderForm = () => {
         buyer_address: "",
       }));
     }
+  };
+
+  const handleCreateBuyer = (inputValue) => {
+    const trimmed = inputValue?.trim();
+    if (!trimmed) return;
+    setOrderData((prev) => ({
+      ...prev,
+      buyer_name: trimmed,
+    }));
   };
 
   const handleBuyerInputChange = (inputValue, { action }) => {
@@ -1066,25 +1089,32 @@ const OrderForm = () => {
               >
                 Buyer <span className="text-red-500">*</span>
               </label>
-              <Select
+              <CreatableSelect
                 id="buyer_select"
                 value={
-                  buyerOptions.find(
-                    (option) =>
-                      option.buyer &&
-                      option.buyer.name === orderData.buyer_name &&
-                      option.buyer.address === orderData.buyer_address
-                  ) || null
+                  orderData.buyer_name
+                    ? buyerOptions.find(
+                        (option) =>
+                          option.buyer &&
+                          option.buyer.name.toLowerCase() ===
+                            orderData.buyer_name.toLowerCase()
+                      ) || {
+                        value: orderData.buyer_name,
+                        label: orderData.buyer_name,
+                      }
+                    : null
                 }
                 onChange={handleBuyerChange}
                 onInputChange={handleBuyerInputChange}
+                onCreateOption={handleCreateBuyer}
                 options={buyerOptions}
-                placeholder="Search and select buyer"
+                placeholder="Search or type buyer name..."
                 isClearable
                 isSearchable
+                formatCreateLabel={(inputValue) => `Gunakan buyer baru: "${inputValue}"`}
                 className="react-select-container"
                 classNamePrefix="react-select"
-                noOptionsMessage={() => "No buyers found"}
+                noOptionsMessage={() => "Ketik nama buyer untuk menambahkan"}
                 styles={{
                   control: (base, state) => ({
                     ...base,
@@ -1114,9 +1144,9 @@ const OrderForm = () => {
                 <button
                   type="button"
                   onClick={handleSaveBuyerToMaster}
-                  disabled={savingBuyer || !orderData.buyer_name?.trim()}
+                  disabled={savingBuyer || !orderData.buyer_name?.trim() || !orderData.buyer_address?.trim()}
                   className="btn-secondary text-xs py-1 px-2.5 inline-flex items-center gap-1 text-primary-700 bg-primary-50 hover:bg-primary-100 border-primary-200 disabled:opacity-50"
-                  title="Simpan nama & alamat ini ke Master Data Buyer"
+                  title="Simpan nama & alamat ini secara sepaket ke Master Data Buyer"
                 >
                   <Save className="w-3.5 h-3.5" />
                   <span>{savingBuyer ? "Menyimpan..." : "Simpan ke Master Buyer"}</span>

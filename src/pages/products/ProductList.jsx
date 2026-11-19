@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, PencilIcon, Trash2, Package, Folder, Download, QrCode, Copy, ShoppingCart } from 'lucide-react';
+import { Plus, PencilIcon, Trash2, Package, Folder, Download, QrCode, Copy, ShoppingCart, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import QRCode from 'qrcode';
 import { productsAPI } from '../../utils/apiProducts';
 import { foldersAPI } from '../../utils/apiFolders';
@@ -32,6 +32,7 @@ const ProductList = () => {
   const [selectedQuantities, setSelectedQuantities] = useState({});
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
+  const [priceSort, setPriceSort] = useState(null); // null | 'asc' | 'desc'
 
   const allowedFolderIds = getAllowedFolderIds();
   const hasFolderRestriction = Boolean(allowedFolderIds && allowedFolderIds.length > 0);
@@ -176,6 +177,27 @@ const ProductList = () => {
     }
   }, [setSearchParams]);
 
+  const handleTogglePriceSort = () => {
+    setPriceSort((prev) => {
+      if (prev === null) return 'asc';
+      if (prev === 'asc') return 'desc';
+      return null;
+    });
+  };
+
+  const sortedProducts = useMemo(() => {
+    if (!priceSort) return products;
+    return [...products].sort((a, b) => {
+      const priceA = parseFloat(a.fob_price) || 0;
+      const priceB = parseFloat(b.fob_price) || 0;
+      if (priceSort === 'asc') {
+        return priceA - priceB;
+      } else {
+        return priceB - priceA;
+      }
+    });
+  }, [products, priceSort]);
+
   const toggleSelect = (productId) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -193,21 +215,37 @@ const ProductList = () => {
   };
 
   const handleQtyChange = (productId, val) => {
-    const qty = Math.max(1, parseInt(val, 10) || 1);
+    // If empty string, keep empty string so user can clear and type freely
+    if (val === '') {
+      setSelectedQuantities((prev) => ({
+        ...prev,
+        [productId]: '',
+      }));
+      return;
+    }
+    const parsed = parseInt(val, 10);
+    const qty = isNaN(parsed) ? 1 : Math.max(1, parsed);
     setSelectedQuantities((prev) => ({
       ...prev,
-      [productId]: qty
+      [productId]: qty,
+    }));
+  };
+
+  const handleQtyBlur = (productId) => {
+    setSelectedQuantities((prev) => ({
+      ...prev,
+      [productId]: Math.max(1, parseInt(prev[productId], 10) || 1),
     }));
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === products.length) {
+    if (selectedIds.size === sortedProducts.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(products.map((p) => p.id)));
+      setSelectedIds(new Set(sortedProducts.map((p) => p.id)));
       setSelectedQuantities((prev) => {
         const next = { ...prev };
-        products.forEach((p) => {
+        sortedProducts.forEach((p) => {
           if (!next[p.id]) next[p.id] = 1;
         });
         return next;
@@ -222,7 +260,7 @@ const ProductList = () => {
     }
     const selectedItems = Array.from(selectedIds).map((id) => ({
       productId: id,
-      qty: parseInt(selectedQuantities[id], 10) || 1
+      qty: Math.max(1, parseInt(selectedQuantities[id], 10) || 1)
     }));
     navigate('/app/orders/new', {
       state: {
@@ -321,19 +359,48 @@ const ProductList = () => {
               <span className="hidden sm:inline text-xs font-medium">Scan QR</span>
             </button>
           </div>
-          <select
-            value={singleAllowedFolderId || selectedFolderId}
-            onChange={(e) => setSelectedFolderId(e.target.value)}
-            disabled={Boolean(singleAllowedFolderId)}
-            className={`input-field sm:w-48 ${singleAllowedFolderId ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-          >
-            {!hasFolderRestriction && <option value="">All Folders</option>}
-            {folders.map((folder) => (
-              <option key={folder.id} value={folder.id}>
-                {folder.name} ({folder.product_count || 0})
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2">
+            <select
+              value={singleAllowedFolderId || selectedFolderId}
+              onChange={(e) => setSelectedFolderId(e.target.value)}
+              disabled={Boolean(singleAllowedFolderId)}
+              className={`input-field sm:w-48 ${singleAllowedFolderId ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+            >
+              {!hasFolderRestriction && <option value="">All Folders</option>}
+              {folders.map((folder) => (
+                <option key={folder.id} value={folder.id}>
+                  {folder.name} ({folder.product_count || 0})
+                </option>
+              ))}
+            </select>
+            {showPrice && (
+              <button
+                type="button"
+                onClick={handleTogglePriceSort}
+                className={`md:hidden btn-secondary px-3 py-2 text-xs font-medium inline-flex items-center gap-1.5 shrink-0 ${
+                  priceSort ? 'text-primary-700 bg-primary-50 border-primary-300' : ''
+                }`}
+                title="Sort by FOB Price"
+              >
+                {priceSort === 'asc' ? (
+                  <>
+                    <ArrowUp className="w-3.5 h-3.5 text-primary-600" />
+                    <span>Termurah</span>
+                  </>
+                ) : priceSort === 'desc' ? (
+                  <>
+                    <ArrowDown className="w-3.5 h-3.5 text-primary-600" />
+                    <span>Termahal</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowUpDown className="w-3.5 h-3.5 text-gray-500" />
+                    <span>Sort Harga</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -348,7 +415,7 @@ const ProductList = () => {
 
       {/* Products Table - Desktop View */}
       <div className="hidden md:block card p-0 overflow-hidden min-w-0">
-        {products.length === 0 ? (
+        {sortedProducts.length === 0 ? (
           <div className="text-center py-12">
             <Package className="mx-auto h-12 w-12 text-gray-400 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No products found</h3>
@@ -367,7 +434,7 @@ const ProductList = () => {
                     <th className="px-3 py-3 text-center w-10">
                       <input
                         type="checkbox"
-                        checked={products.length > 0 && selectedIds.size === products.length}
+                        checked={sortedProducts.length > 0 && selectedIds.size === sortedProducts.length}
                         onChange={toggleSelectAll}
                         className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                         title="Select all on this page"
@@ -390,7 +457,34 @@ const ProductList = () => {
                     </th>
                     {showPrice && (
                       <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        FOB Price
+                        <button
+                          type="button"
+                          onClick={handleTogglePriceSort}
+                          className="inline-flex items-center gap-1.5 hover:text-gray-900 group focus:outline-none transition-colors"
+                          title={
+                            priceSort === 'asc'
+                              ? 'Urutan: Termurah ke Termahal (Klik untuk Termahal)'
+                              : priceSort === 'desc'
+                              ? 'Urutan: Termahal ke Termurah (Klik untuk Reset)'
+                              : 'Klik untuk urutkan harga (Termurah ke Termahal)'
+                          }
+                        >
+                          <span>FOB Price</span>
+                          <span className="flex items-center">
+                            {priceSort === 'asc' ? (
+                              <ArrowUp className="w-3.5 h-3.5 text-primary-600 font-bold" />
+                            ) : priceSort === 'desc' ? (
+                              <ArrowDown className="w-3.5 h-3.5 text-primary-600 font-bold" />
+                            ) : (
+                              <ArrowUpDown className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600" />
+                            )}
+                          </span>
+                          {priceSort && (
+                            <span className="text-[10px] lowercase font-normal px-1 py-0.5 rounded bg-primary-50 text-primary-700 border border-primary-200">
+                              {priceSort === 'asc' ? 'termurah' : 'termahal'}
+                            </span>
+                          )}
+                        </button>
                       </th>
                     )}
                     <th className="px-4 lg:px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -404,7 +498,7 @@ const ProductList = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {products.map((product) => (
+                  {sortedProducts.map((product) => (
                     <tr key={product.id} className={`hover:bg-gray-50 ${selectedIds.has(product.id) ? 'bg-primary-50/50' : ''}`}>
                       <td className="px-3 py-4 text-center">
                         <div className="flex flex-col items-center gap-1">
@@ -422,6 +516,7 @@ const ProductList = () => {
                                 min="1"
                                 value={selectedQuantities[product.id] ?? 1}
                                 onChange={(e) => handleQtyChange(product.id, e.target.value)}
+                                onBlur={() => handleQtyBlur(product.id)}
                                 className="w-12 text-center text-xs py-0.5 px-1 border border-primary-400 rounded focus:ring-1 focus:ring-primary-500 bg-white"
                                 title="Qty for order"
                               />
@@ -555,7 +650,7 @@ const ProductList = () => {
               />
             ) : (
               <div className="p-3 text-center text-xs text-gray-500 border-t border-gray-100">
-                Menampilkan semua {products.length} produk
+                Menampilkan semua {sortedProducts.length} produk
               </div>
             )}
           </>
@@ -564,7 +659,7 @@ const ProductList = () => {
 
       {/* Products Cards - Mobile View */}
       <div className="md:hidden space-y-4">
-        {products.length === 0 ? (
+        {sortedProducts.length === 0 ? (
           <div className="card text-center py-12">
             <Package className="mx-auto h-12 w-12 text-gray-400 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No products found</h3>
@@ -576,7 +671,7 @@ const ProductList = () => {
           </div>
         ) : (
           <>
-            {products.map((product) => (
+            {sortedProducts.map((product) => (
               <div key={product.id} className={`card ${selectedIds.has(product.id) ? 'ring-2 ring-primary-300' : ''}`}>
                 <div className="flex items-start space-x-4">
                   <div className="flex flex-col items-center gap-1 shrink-0">
@@ -592,6 +687,7 @@ const ProductList = () => {
                         min="1"
                         value={selectedQuantities[product.id] ?? 1}
                         onChange={(e) => handleQtyChange(product.id, e.target.value)}
+                        onBlur={() => handleQtyBlur(product.id)}
                         onClick={(e) => e.stopPropagation()}
                         className="w-12 text-center text-xs py-0.5 px-1 border border-primary-400 rounded focus:ring-1 focus:ring-primary-500 bg-white"
                         title="Qty"
@@ -729,7 +825,7 @@ const ProductList = () => {
               />
             ) : (
               <div className="p-3 text-center text-xs text-gray-500">
-                Menampilkan semua {products.length} produk
+                Menampilkan semua {sortedProducts.length} produk
               </div>
             )}
           </>

@@ -356,9 +356,21 @@ app.get('/api/products', async (req, res) => {
     const folderId = req.query.folder_id;
     const folderIds = req.query.folder_ids;
     
+    const sortPrice = req.query.sortPrice || req.query.sort_price || (req.query.sortBy === 'price' ? req.query.sortOrder : null);
+    let isNumericSearch = false;
+    let numericId = null;
+
     if (search) {
-      whereClause = 'WHERE (p.km_code LIKE ? OR p.description LIKE ? OR p.client_code LIKE ?)';
-      queryParams = [`%${search}%`, `%${search}%`, `%${search}%`];
+      const trimmedSearch = search.trim();
+      isNumericSearch = /^\d+$/.test(trimmedSearch);
+      if (isNumericSearch) {
+        numericId = parseInt(trimmedSearch, 10);
+        whereClause = 'WHERE (p.id = ? OR p.km_code LIKE ? OR p.description LIKE ? OR p.client_code LIKE ?)';
+        queryParams = [numericId, `%${trimmedSearch}%`, `%${trimmedSearch}%`, `%${trimmedSearch}%`];
+      } else {
+        whereClause = 'WHERE (p.km_code LIKE ? OR p.description LIKE ? OR p.client_code LIKE ?)';
+        queryParams = [`%${trimmedSearch}%`, `%${trimmedSearch}%`, `%${trimmedSearch}%`];
+      }
     }
     
     if (folderId) {
@@ -389,13 +401,23 @@ app.get('/api/products', async (req, res) => {
     const totalItems = countResult[0].total;
     const totalPages = Math.ceil(totalItems / limit);
 
+    // Build ORDER BY clause
+    let orderClause = 'ORDER BY p.created_at DESC';
+    if (isNumericSearch && numericId) {
+      orderClause = `ORDER BY (p.id = ${numericId}) DESC, p.created_at DESC`;
+    } else if (sortPrice === 'asc') {
+      orderClause = 'ORDER BY p.fob_price ASC, p.created_at DESC';
+    } else if (sortPrice === 'desc') {
+      orderClause = 'ORDER BY p.fob_price DESC, p.created_at DESC';
+    }
+
     // Get products with folder information
     const productsQuery = `
       SELECT p.*, f.name as folder_name, f.color as folder_color 
       FROM products p
       LEFT JOIN product_folders f ON p.folder_id = f.id
       ${whereClause}
-      ORDER BY p.created_at DESC 
+      ${orderClause} 
       LIMIT ? OFFSET ?
     `;
     // Note: p.* includes all columns including client_code, client_barcode, and description (now nullable)
@@ -1403,7 +1425,7 @@ app.get('/api/buyers/:id', async (req, res) => {
   }
 });
 
-// Create buyer
+// Create buyer (or update if already exists by name)
 app.post('/api/buyers', async (req, res) => {
   try {
     const { name, address } = req.body;
@@ -1412,9 +1434,29 @@ app.post('/api/buyers', async (req, res) => {
       return res.status(400).json({ error: 'Name and address are required' });
     }
 
+    const trimmedName = String(name).trim();
+    const trimmedAddress = String(address).trim();
+
+    // Check if buyer with same name already exists
+    const [existing] = await db.execute(
+      'SELECT id FROM buyers WHERE LOWER(name) = LOWER(?)',
+      [trimmedName]
+    );
+
+    if (existing.length > 0) {
+      await db.execute(
+        'UPDATE buyers SET address = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [trimmedAddress, existing[0].id]
+      );
+      return res.status(200).json({ 
+        id: existing[0].id, 
+        message: 'Buyer updated successfully' 
+      });
+    }
+
     const [result] = await db.execute(
       'INSERT INTO buyers (name, address) VALUES (?, ?)',
-      [name, address]
+      [trimmedName, trimmedAddress]
     );
 
     res.status(201).json({ 
